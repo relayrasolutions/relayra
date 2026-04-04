@@ -29,7 +29,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchAppUser = async (authId: string, userEmail?: string): Promise<AppUser | null> => {
     try {
-      // First try to fetch existing record
+      // Use the SECURITY DEFINER upsert function that bypasses RLS
+      // This finds by auth_id, falls back to email match, or creates a new record
+      if (userEmail) {
+        const { data: rpcData, error: rpcError } = await supabase
+          .rpc('upsert_user_on_login', {
+            p_auth_id: authId,
+            p_email: userEmail,
+          });
+
+        if (!rpcError && rpcData && rpcData.length > 0) {
+          const d = rpcData[0];
+          return {
+            id: d.id,
+            authId: d.auth_id,
+            email: d.email,
+            role: d.role,
+            schoolId: d.school_id,
+            name: d.name,
+            phone: null,
+            isActive: d.is_active,
+          };
+        }
+        console.error('[AuthContext] upsert_user_on_login RPC error:', rpcError);
+      }
+
+      // Fallback: direct table query (works if auth_id already matches)
       const { data, error } = await supabase
         .from('users')
         .select('*')
@@ -47,33 +72,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           phone: data.phone,
           isActive: data.is_active,
         };
-      }
-
-      // If no record found and we have an email, try to auto-provision
-      if (userEmail) {
-        try {
-          const { data: provisionedData, error: provisionError } = await supabase
-            .rpc('auto_provision_user', {
-              p_auth_id: authId,
-              p_email: userEmail,
-            });
-
-          if (!provisionError && provisionedData && provisionedData.length > 0) {
-            const pd = provisionedData[0];
-            return {
-              id: pd.id,
-              authId: pd.auth_id,
-              email: pd.email,
-              role: pd.role,
-              schoolId: pd.school_id,
-              name: pd.name,
-              phone: null,
-              isActive: pd.is_active,
-            };
-          }
-        } catch {
-          // Auto-provision failed, return null
-        }
       }
 
       return null;

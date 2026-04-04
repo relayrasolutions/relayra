@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -13,8 +13,28 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('Signing in...');
   const [forgotLoading, setForgotLoading] = useState(false);
-  const { signIn } = useAuth();
+  const [awaitingRedirect, setAwaitingRedirect] = useState(false);
+  const { signIn, user } = useAuth();
   const router = useRouter();
+
+  // Watch for user to be set after signIn triggers onAuthStateChange
+  useEffect(() => {
+    if (awaitingRedirect && user) {
+      console.log('[Login] User resolved via AuthContext. Role:', user.role);
+      setLoadingMessage('Redirecting...');
+
+      if (user.role === 'super_admin') {
+        console.log('[Login] Redirecting to /admin');
+        router.push('/admin');
+      } else if (user.role === 'school_staff') {
+        console.log('[Login] Redirecting to /teacher');
+        router.push('/teacher');
+      } else {
+        console.log('[Login] Redirecting to /dashboard');
+        router.push('/dashboard');
+      }
+    }
+  }, [user, awaitingRedirect, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,78 +58,55 @@ export default function LoginPage() {
     console.log('[Login] Step 1 SUCCESS — Supabase Auth login succeeded');
     setLoadingMessage('Loading your profile...');
 
-    try {
-      // Step 2: Get the authenticated session to retrieve UUID
-      console.log('[Login] Step 2: Getting session to retrieve auth UUID...');
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    // Mark that we're waiting for AuthContext to resolve the user
+    // onAuthStateChange will fire, call upsert_user_on_login, set user state
+    // The useEffect above will then redirect
+    setAwaitingRedirect(true);
 
-      if (sessionError) {
-        console.error('[Login] Step 2 FAILED — getSession error:', sessionError);
-        toast.error('Session error. Please try again.');
-        setLoading(false);
-        return;
+    // Fallback: if AuthContext doesn't resolve user within 5 seconds, try manually
+    setTimeout(async () => {
+      if (!user) {
+        console.log('[Login] Fallback: AuthContext did not resolve user, trying manual RPC...');
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.user) {
+            const { data: rpcData, error: rpcError } = await supabase
+              .rpc('upsert_user_on_login', {
+                p_auth_id: session.user.id,
+                p_email: session.user.email || email,
+              });
+
+            console.log('[Login] Fallback RPC result:', rpcData, rpcError);
+
+            if (!rpcError && rpcData && rpcData.length > 0) {
+              const userData = rpcData[0];
+              console.log('[Login] Fallback SUCCESS — Role:', userData.role);
+              if (userData.role === 'super_admin') {
+                router.push('/admin');
+              } else if (userData.role === 'school_staff') {
+                router.push('/teacher');
+              } else {
+                router.push('/dashboard');
+              }
+            } else {
+              console.error('[Login] Fallback RPC failed:', rpcError);
+              toast.error('Could not load user profile. Please contact support.');
+              setLoading(false);
+              setAwaitingRedirect(false);
+            }
+          } else {
+            console.error('[Login] Fallback: No session found');
+            toast.error('Session not found. Please try again.');
+            setLoading(false);
+            setAwaitingRedirect(false);
+          }
+        } catch (err) {
+          console.error('[Login] Fallback error:', err);
+          setLoading(false);
+          setAwaitingRedirect(false);
+        }
       }
-
-      if (!session?.user) {
-        console.error('[Login] Step 2 FAILED — No session/user found after successful login');
-        toast.error('Session not found. Please try again.');
-        setLoading(false);
-        return;
-      }
-
-      const authUserId = session.user.id;
-      const userEmail = session.user.email || email;
-      console.log('[Login] Step 2 SUCCESS — Auth UUID:', authUserId, '| Email:', userEmail);
-
-      // Step 3: Use SECURITY DEFINER RPC to find/create user record (bypasses RLS)
-      console.log('[Login] Step 3: Calling upsert_user_on_login RPC for auth_id =', authUserId);
-      setLoadingMessage('Setting up your account...');
-
-      const { data: rpcData, error: rpcError } = await supabase
-        .rpc('upsert_user_on_login', {
-          p_auth_id: authUserId,
-          p_email: userEmail,
-        });
-
-      console.log('[Login] Step 3 RPC result — data:', rpcData, '| error:', rpcError);
-
-      if (rpcError) {
-        console.error('[Login] Step 3 RPC FAILED:', rpcError);
-        toast.error('Could not load user profile. Please contact support.');
-        setLoading(false);
-        return;
-      }
-
-      const userData = rpcData && rpcData.length > 0 ? rpcData[0] : null;
-
-      if (!userData) {
-        console.error('[Login] Step 3 — RPC returned empty result');
-        toast.error('User profile not found. Please contact support.');
-        setLoading(false);
-        return;
-      }
-
-      console.log('[Login] Step 3 SUCCESS — User resolved. Role:', userData.role);
-
-      // Step 4: Redirect based on role
-      setLoadingMessage('Redirecting...');
-      console.log('[Login] Step 4: Redirecting. Role =', userData.role);
-
-      if (userData.role === 'super_admin') {
-        console.log('[Login] Step 4 → Redirecting to /admin');
-        router.push('/admin');
-      } else if (userData.role === 'school_staff') {
-        console.log('[Login] Step 4 → Redirecting to /teacher');
-        router.push('/teacher');
-      } else {
-        console.log('[Login] Step 4 → Redirecting to /dashboard');
-        router.push('/dashboard');
-      }
-    } catch (err) {
-      console.error('[Login] Unexpected error in post-login flow:', err);
-      toast.error('Login succeeded but redirect failed. Please refresh.');
-      setLoading(false);
-    }
+    }, 5000);
   };
 
   const handleForgotPassword = async () => {
