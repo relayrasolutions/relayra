@@ -61,121 +61,48 @@ export default function LoginPage() {
       const userEmail = session.user.email || email;
       console.log('[Login] Step 2 SUCCESS — Auth UUID:', authUserId, '| Email:', userEmail);
 
-      // Step 3: Look up users table by auth_id
-      console.log('[Login] Step 3: Looking up users table by auth_id =', authUserId);
-      const { data: userByAuthId, error: authIdError } = await supabase
-        .from('users')
-        .select('id, role, school_id, name, auth_id, email')
-        .eq('auth_id', authUserId)
-        .maybeSingle();
+      // Step 3: Use SECURITY DEFINER RPC to find/create user record (bypasses RLS)
+      console.log('[Login] Step 3: Calling upsert_user_on_login RPC for auth_id =', authUserId);
+      setLoadingMessage('Setting up your account...');
 
-      console.log('[Login] Step 3 result — data:', userByAuthId, '| error:', authIdError);
+      const { data: rpcData, error: rpcError } = await supabase
+        .rpc('upsert_user_on_login', {
+          p_auth_id: authUserId,
+          p_email: userEmail,
+        });
 
-      let userData: { role: string; school_id: string | null; name: string } | null = null;
+      console.log('[Login] Step 3 RPC result — data:', rpcData, '| error:', rpcError);
 
-      if (userByAuthId) {
-        // Found by auth_id — use directly
-        console.log('[Login] Step 3 SUCCESS — Found user by auth_id. Role:', userByAuthId.role);
-        userData = { role: userByAuthId.role, school_id: userByAuthId.school_id, name: userByAuthId.name };
-      } else {
-        // Step 4: No match by auth_id — try email lookup
-        console.log('[Login] Step 3 MISS — No user found by auth_id. Step 4: Looking up by email =', userEmail);
-        setLoadingMessage('Setting up your account...');
-
-        const { data: userByEmail, error: emailError } = await supabase
-          .from('users')
-          .select('id, role, school_id, name, auth_id, email')
-          .eq('email', userEmail)
-          .maybeSingle();
-
-        console.log('[Login] Step 4 result — data:', userByEmail, '| error:', emailError);
-
-        if (userByEmail) {
-          // Found by email — update auth_id to current UUID
-          console.log('[Login] Step 4 SUCCESS — Found user by email. Old auth_id:', userByEmail.auth_id, '→ Updating to:', authUserId);
-
-          const { error: updateError } = await supabase
-            .from('users')
-            .update({ auth_id: authUserId })
-            .eq('id', userByEmail.id);
-
-          if (updateError) {
-            console.error('[Login] Step 4 UPDATE FAILED — Could not update auth_id:', updateError);
-            // Still proceed with the data we have
-          } else {
-            console.log('[Login] Step 4 UPDATE SUCCESS — auth_id updated in users table');
-          }
-
-          userData = { role: userByEmail.role, school_id: userByEmail.school_id, name: userByEmail.name };
-        } else {
-          // Step 5: No email match either — create new user record
-          console.log('[Login] Step 4 MISS — No user found by email either. Step 5: Creating new user record...');
-
-          // Determine role from known email patterns
-          let role = 'school_admin';
-          let name = userEmail.split('@')[0];
-          let schoolId: string | null = null;
-
-          if (userEmail.toLowerCase().includes('relayrasolutions')) {
-            role = 'super_admin';
-            name = 'Relayra Admin';
-          } else if (userEmail.toLowerCase().includes('teacher')) {
-            role = 'school_staff';
-            name = 'Teacher';
-          }
-
-          // Try to get a school_id if not super_admin
-          if (role !== 'super_admin') {
-            const { data: schoolData } = await supabase
-              .from('schools')
-              .select('id')
-              .limit(1)
-              .single();
-            schoolId = schoolData?.id || null;
-            console.log('[Login] Step 5 — Resolved school_id:', schoolId);
-          }
-
-          const newUserPayload = {
-            auth_id: authUserId,
-            email: userEmail,
-            role,
-            name,
-            school_id: schoolId,
-            is_active: true,
-          };
-
-          console.log('[Login] Step 5 — Inserting new user:', newUserPayload);
-
-          const { data: newUser, error: insertError } = await supabase
-            .from('users')
-            .insert(newUserPayload)
-            .select('role, school_id, name')
-            .single();
-
-          if (insertError) {
-            console.error('[Login] Step 5 INSERT FAILED:', insertError);
-            toast.error('Could not create user record. Please contact support.');
-            setLoading(false);
-            return;
-          }
-
-          console.log('[Login] Step 5 SUCCESS — New user created:', newUser);
-          userData = newUser;
-        }
+      if (rpcError) {
+        console.error('[Login] Step 3 RPC FAILED:', rpcError);
+        toast.error('Could not load user profile. Please contact support.');
+        setLoading(false);
+        return;
       }
 
-      // Step 6: Redirect based on role
-      setLoadingMessage('Redirecting...');
-      console.log('[Login] Step 6: Redirecting. Role =', userData?.role);
+      const userData = rpcData && rpcData.length > 0 ? rpcData[0] : null;
 
-      if (userData?.role === 'super_admin') {
-        console.log('[Login] Step 6 → Redirecting to /admin');
+      if (!userData) {
+        console.error('[Login] Step 3 — RPC returned empty result');
+        toast.error('User profile not found. Please contact support.');
+        setLoading(false);
+        return;
+      }
+
+      console.log('[Login] Step 3 SUCCESS — User resolved. Role:', userData.role);
+
+      // Step 4: Redirect based on role
+      setLoadingMessage('Redirecting...');
+      console.log('[Login] Step 4: Redirecting. Role =', userData.role);
+
+      if (userData.role === 'super_admin') {
+        console.log('[Login] Step 4 → Redirecting to /admin');
         router.push('/admin');
-      } else if (userData?.role === 'school_staff') {
-        console.log('[Login] Step 6 → Redirecting to /teacher');
+      } else if (userData.role === 'school_staff') {
+        console.log('[Login] Step 4 → Redirecting to /teacher');
         router.push('/teacher');
       } else {
-        console.log('[Login] Step 6 → Redirecting to /dashboard');
+        console.log('[Login] Step 4 → Redirecting to /dashboard');
         router.push('/dashboard');
       }
     } catch (err) {
