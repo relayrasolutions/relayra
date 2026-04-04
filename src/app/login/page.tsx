@@ -27,6 +27,7 @@ export default function LoginPage() {
 
     const { error } = await signIn(email, password);
     if (error) {
+      console.error('[Login] signIn returned error:', error);
       toast.error(error || 'Invalid credentials');
       setLoading(false);
       return;

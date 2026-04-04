@@ -118,8 +118,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string): Promise<{ error: string | null }> => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) return { error: error.message };
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      console.error('[Supabase signInWithPassword] Raw error:', {
+        message: error.message,
+        status: error.status,
+        name: error.name,
+      });
+      console.error('[Supabase Config] URL:', process.env.NEXT_PUBLIC_SUPABASE_URL ? process.env.NEXT_PUBLIC_SUPABASE_URL.substring(0, 30) + '...' : 'MISSING');
+      console.error('[Supabase Config] Anon Key present:', !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+      return { error: error.message };
+    }
+    console.log('[Supabase signInWithPassword] Success. User ID:', data.user?.id);
     return { error: null };
   };
 
