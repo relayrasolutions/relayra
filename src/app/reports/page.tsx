@@ -5,6 +5,7 @@ import { supabase, formatCurrency, formatDate } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import AppLayout from '@/components/AppLayout';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
+import toast from 'react-hot-toast';
 
 export default function ReportsPage() {
   const { user } = useAuth();
@@ -122,6 +123,61 @@ export default function ReportsPage() {
     setLoading(false);
   }, [user?.schoolId]);
 
+  const handleExportFeeReport = async () => {
+    try {
+      const XLSX = await import('xlsx');
+      const exportData = classBreakdown.map(r => ({
+        'Class': r.class,
+        'Generated (Rs.)': (r.generated / 100).toFixed(2),
+        'Collected (Rs.)': (r.collected / 100).toFixed(2),
+        'Pending (Rs.)': (r.pending / 100).toFixed(2),
+        'Collection Rate (%)': r.rate,
+      }));
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Fee Report');
+
+      // Add defaulters sheet
+      if (defaulters.length > 0) {
+        const defData = defaulters.map(d => ({
+          'Student': d.name,
+          'Class': d.class,
+          'Section': d.section,
+          'Pending Amount (Rs.)': (d.pending / 100).toFixed(2),
+          'Overdue Since': d.dueDate,
+        }));
+        const ws2 = XLSX.utils.json_to_sheet(defData);
+        XLSX.utils.book_append_sheet(wb, ws2, 'Defaulters');
+      }
+
+      XLSX.writeFile(wb, `fee_report_${new Date().toISOString().split('T')[0]}.xlsx`);
+      toast.success('Fee report exported to Excel');
+    } catch (err: any) {
+      toast.error('Export failed: ' + err.message);
+    }
+  };
+
+  const handleExportAttReport = async () => {
+    try {
+      const XLSX = await import('xlsx');
+      const exportData = lowAttStudents.map(s => ({
+        'Student': s.name,
+        'Class': s.class,
+        'Section': s.section,
+        'Total Days': s.total,
+        'Present Days': s.present,
+        'Attendance %': s.pct,
+      }));
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Low Attendance');
+      XLSX.writeFile(wb, `attendance_report_${new Date().toISOString().split('T')[0]}.xlsx`);
+      toast.success('Attendance report exported to Excel');
+    } catch (err: any) {
+      toast.error('Export failed: ' + err.message);
+    }
+  };
+
   useEffect(() => {
     if (activeTab === 'fee') fetchFeeReport();
     else if (activeTab === 'attendance') fetchAttReport();
@@ -131,7 +187,19 @@ export default function ReportsPage() {
   return (
     <AppLayout>
       <div className="space-y-5">
-        <h1 className="text-2xl font-bold text-[#1E293B]">Reports</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-[#1E293B]">Reports</h1>
+          {activeTab === 'fee' && !loading && (
+            <button onClick={handleExportFeeReport} className="bg-white border border-[#E2E8F0] text-[#1E293B] px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#F8FAFC] flex items-center gap-2">
+              📊 Export Excel
+            </button>
+          )}
+          {activeTab === 'attendance' && !loading && (
+            <button onClick={handleExportAttReport} className="bg-white border border-[#E2E8F0] text-[#1E293B] px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#F8FAFC] flex items-center gap-2">
+              📊 Export Excel
+            </button>
+          )}
+        </div>
 
         <div className="flex gap-1 bg-[#F1F5F9] p-1 rounded-lg w-fit">
           {(['fee', 'attendance', 'communication'] as const).map(tab => (

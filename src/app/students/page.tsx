@@ -13,7 +13,7 @@ interface Student {
   address: string | null; busRoute: string | null;
   parentName: string; parentPhone: string;
   secondaryPhone: string | null; parentEmail: string | null;
-  status: string; feeStatus?: string;
+  status: string; feeStatus?: string; photoUrl: string | null;
 }
 
 interface UploadPreviewRow {
@@ -55,6 +55,12 @@ export default function StudentsPage() {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Photo upload state
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+
   const fetchStudents = useCallback(async () => {
     if (!user?.schoolId) return;
     setLoading(true);
@@ -90,6 +96,7 @@ export default function StudentsPage() {
         parentName: s.parent_name, parentPhone: s.parent_phone,
         secondaryPhone: s.secondary_phone, parentEmail: s.parent_email,
         status: s.status, feeStatus: feeMap[s.id] || 'paid',
+        photoUrl: s.photo_url || null,
       })));
       setTotal(count || 0);
     } catch (err: any) {
@@ -101,7 +108,14 @@ export default function StudentsPage() {
 
   useEffect(() => { fetchStudents(); }, [fetchStudents]);
 
-  const openAdd = () => { setEditStudent(null); setForm(emptyForm); setShowModal(true); };
+  const openAdd = () => {
+    setEditStudent(null);
+    setForm(emptyForm);
+    setPhotoFile(null);
+    setPhotoPreview(null);
+    setShowModal(true);
+  };
+
   const openEdit = (s: Student) => {
     setEditStudent(s);
     setForm({
@@ -112,7 +126,40 @@ export default function StudentsPage() {
       parentName: s.parentName, parentPhone: s.parentPhone,
       secondaryPhone: s.secondaryPhone || '', parentEmail: s.parentEmail || '',
     });
+    setPhotoFile(null);
+    setPhotoPreview(s.photoUrl || null);
     setShowModal(true);
+  };
+
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Photo must be under 5MB');
+      return;
+    }
+    setPhotoFile(file);
+    const reader = new FileReader();
+    reader.onload = ev => setPhotoPreview(ev.target?.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const uploadPhoto = async (studentId: string): Promise<string | null> => {
+    if (!photoFile) return null;
+    setUploadingPhoto(true);
+    try {
+      const ext = photoFile.name.split('.').pop();
+      const path = `${user!.schoolId}/${studentId}.${ext}`;
+      const { error } = await supabase.storage.from('student-photos').upload(path, photoFile, { upsert: true });
+      if (error) throw error;
+      const { data: urlData } = supabase.storage.from('student-photos').getPublicUrl(path);
+      return urlData.publicUrl;
+    } catch (err: any) {
+      toast.error('Photo upload failed: ' + err.message);
+      return null;
+    } finally {
+      setUploadingPhoto(false);
+    }
   };
 
   const handleSave = async () => {
@@ -127,7 +174,7 @@ export default function StudentsPage() {
     }
     setSaving(true);
     try {
-      const payload = {
+      const payload: any = {
         school_id: user!.schoolId,
         name: form.name, class: form.class, section: form.section,
         roll_number: form.rollNumber || null, admission_number: form.admissionNumber || null,
@@ -136,13 +183,26 @@ export default function StudentsPage() {
         parent_name: form.parentName, parent_phone: phone,
         secondary_phone: form.secondaryPhone || null, parent_email: form.parentEmail || null,
       };
+
       if (editStudent) {
-        const { error } = await supabase.from('students').update(payload).eq('id', editStudent.id);
+        const { data: updated, error } = await supabase.from('students').update(payload).eq('id', editStudent.id).select().single();
         if (error) throw error;
+        if (photoFile && updated) {
+          const photoUrl = await uploadPhoto(updated.id);
+          if (photoUrl) {
+            await supabase.from('students').update({ photo_url: photoUrl }).eq('id', updated.id);
+          }
+        }
         toast.success('Student updated successfully');
       } else {
         const { data, error } = await supabase.from('students').insert(payload).select().single();
         if (error) throw error;
+        if (photoFile && data) {
+          const photoUrl = await uploadPhoto(data.id);
+          if (photoUrl) {
+            await supabase.from('students').update({ photo_url: photoUrl }).eq('id', data.id);
+          }
+        }
         await supabase.from('activity_log').insert({
           school_id: user!.schoolId, user_id: user!.id,
           action: 'student_added', description: `Added student ${form.name} to Class ${form.class}${form.section}`,
@@ -165,6 +225,38 @@ export default function StudentsPage() {
     if (error) { toast.error(error.message); return; }
     toast.success('Student marked as inactive');
     fetchStudents();
+  };
+
+  // Export to Excel
+  const handleExportExcel = async () => {
+    try {
+      const XLSX = await import('xlsx');
+      const exportData = students.map((s, idx) => ({
+        'S.No': (page - 1) * PAGE_SIZE + idx + 1,
+        'Name': s.name,
+        'Class': s.class,
+        'Section': s.section,
+        'Roll Number': s.rollNumber || '',
+        'Admission Number': s.admissionNumber || '',
+        'Gender': s.gender || '',
+        'Date of Birth': s.dateOfBirth || '',
+        'Parent Name': s.parentName,
+        'Parent Phone': s.parentPhone,
+        'Secondary Phone': s.secondaryPhone || '',
+        'Parent Email': s.parentEmail || '',
+        'Address': s.address || '',
+        'Bus Route': s.busRoute || '',
+        'Status': s.status,
+        'Fee Status': s.feeStatus || '',
+      }));
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Students');
+      XLSX.writeFile(wb, `students_${new Date().toISOString().split('T')[0]}.xlsx`);
+      toast.success('Students exported to Excel');
+    } catch (err: any) {
+      toast.error('Export failed: ' + err.message);
+    }
   };
 
   // CSV/Excel parsing
@@ -265,7 +357,7 @@ export default function StudentsPage() {
             <h1 className="text-2xl font-bold text-[#1E293B]">Students</h1>
             <p className="text-[#64748B] text-sm">{total} students total</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <input
               ref={fileInputRef}
               type="file"
@@ -273,6 +365,12 @@ export default function StudentsPage() {
               onChange={handleFileChange}
               className="hidden"
             />
+            <button
+              onClick={handleExportExcel}
+              className="bg-white border border-[#E2E8F0] text-[#1E293B] px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#F8FAFC] flex items-center gap-2"
+            >
+              📊 Export Excel
+            </button>
             <button
               onClick={() => fileInputRef.current?.click()}
               className="bg-white border border-[#E2E8F0] text-[#1E293B] px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#F8FAFC] flex items-center gap-2"
@@ -341,6 +439,7 @@ export default function StudentsPage() {
                       <input type="checkbox" onChange={e => setSelectedIds(e.target.checked ? students.map(s => s.id) : [])} checked={selectedIds.length === students.length && students.length > 0} className="rounded" />
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-[#64748B] uppercase tracking-wider">S.No</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-[#64748B] uppercase tracking-wider">Photo</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-[#64748B] uppercase tracking-wider">Name</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-[#64748B] uppercase tracking-wider">Class</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-[#64748B] uppercase tracking-wider">Roll No</th>
@@ -357,6 +456,15 @@ export default function StudentsPage() {
                         <input type="checkbox" checked={selectedIds.includes(s.id)} onChange={e => setSelectedIds(e.target.checked ? [...selectedIds, s.id] : selectedIds.filter(id => id !== s.id))} className="rounded" />
                       </td>
                       <td className="px-4 py-3 text-[#64748B]">{(page - 1) * PAGE_SIZE + idx + 1}</td>
+                      <td className="px-4 py-3">
+                        {s.photoUrl ? (
+                          <img src={s.photoUrl} alt={s.name} className="w-8 h-8 rounded-full object-cover border border-[#E2E8F0]" />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-[#0D9488] flex items-center justify-center">
+                            <span className="text-white text-xs font-semibold">{s.name.charAt(0).toUpperCase()}</span>
+                          </div>
+                        )}
+                      </td>
                       <td className="px-4 py-3">
                         <p className="font-medium text-[#1E293B]">{s.name}</p>
                         <p className="text-xs text-[#64748B]">{s.admissionNumber || '-'}</p>
@@ -406,57 +514,94 @@ export default function StudentsPage() {
                 </svg>
               </button>
             </div>
-            <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {[
-                { label: 'Student Name *', key: 'name', type: 'text' },
-                { label: 'Roll Number', key: 'rollNumber', type: 'text' },
-                { label: 'Admission Number', key: 'admissionNumber', type: 'text' },
-                { label: 'Date of Birth', key: 'dateOfBirth', type: 'date' },
-                { label: 'Address', key: 'address', type: 'text' },
-                { label: 'Bus Route', key: 'busRoute', type: 'text' },
-                { label: 'Parent/Guardian Name *', key: 'parentName', type: 'text' },
-                { label: 'Parent Phone * (10 digits)', key: 'parentPhone', type: 'tel' },
-                { label: 'Secondary Phone', key: 'secondaryPhone', type: 'tel' },
-                { label: 'Parent Email', key: 'parentEmail', type: 'email' },
-              ].map(field => (
-                <div key={field.key}>
-                  <label className="block text-sm font-medium text-[#1E293B] mb-1">{field.label}</label>
-                  <input
-                    type={field.type}
-                    value={(form as any)[field.key]}
-                    onChange={e => setForm(f => ({ ...f, [field.key]: e.target.value }))}
-                    className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0D9488]"
-                  />
+            <div className="p-6 space-y-4">
+              {/* Photo Upload */}
+              <div className="flex items-center gap-4">
+                <div className="relative">
+                  {photoPreview ? (
+                    <img src={photoPreview} alt="Student photo" className="w-20 h-20 rounded-full object-cover border-2 border-[#0D9488]" />
+                  ) : (
+                    <div className="w-20 h-20 rounded-full bg-[#F1F5F9] border-2 border-dashed border-[#CBD5E1] flex items-center justify-center">
+                      <svg className="w-8 h-8 text-[#94A3B8]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                    </div>
+                  )}
                 </div>
-              ))}
-              <div>
-                <label className="block text-sm font-medium text-[#1E293B] mb-1">Class *</label>
-                <select value={form.class} onChange={e => setForm(f => ({ ...f, class: e.target.value }))} className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0D9488]">
-                  <option value="">Select Class</option>
-                  {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
+                <div>
+                  <input ref={photoInputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={handlePhotoChange} className="hidden" />
+                  <button
+                    type="button"
+                    onClick={() => photoInputRef.current?.click()}
+                    className="bg-white border border-[#E2E8F0] text-[#1E293B] px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-[#F8FAFC]"
+                  >
+                    {photoPreview ? 'Change Photo' : 'Upload Photo'}
+                  </button>
+                  <p className="text-xs text-[#64748B] mt-1">JPG, PNG, WebP · Max 5MB</p>
+                  {photoPreview && (
+                    <button
+                      type="button"
+                      onClick={() => { setPhotoFile(null); setPhotoPreview(null); }}
+                      className="text-xs text-red-500 hover:text-red-700 mt-1 block"
+                    >
+                      Remove photo
+                    </button>
+                  )}
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-[#1E293B] mb-1">Section *</label>
-                <select value={form.section} onChange={e => setForm(f => ({ ...f, section: e.target.value }))} className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0D9488]">
-                  <option value="">Select Section</option>
-                  {SECTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-[#1E293B] mb-1">Gender</label>
-                <select value={form.gender} onChange={e => setForm(f => ({ ...f, gender: e.target.value }))} className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0D9488]">
-                  <option value="">Select Gender</option>
-                  <option value="Male">Male</option>
-                  <option value="Female">Female</option>
-                  <option value="Other">Other</option>
-                </select>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {[
+                  { label: 'Student Name *', key: 'name', type: 'text' },
+                  { label: 'Roll Number', key: 'rollNumber', type: 'text' },
+                  { label: 'Admission Number', key: 'admissionNumber', type: 'text' },
+                  { label: 'Date of Birth', key: 'dateOfBirth', type: 'date' },
+                  { label: 'Address', key: 'address', type: 'text' },
+                  { label: 'Bus Route', key: 'busRoute', type: 'text' },
+                  { label: 'Parent/Guardian Name *', key: 'parentName', type: 'text' },
+                  { label: 'Parent Phone * (10 digits)', key: 'parentPhone', type: 'tel' },
+                  { label: 'Secondary Phone', key: 'secondaryPhone', type: 'tel' },
+                  { label: 'Parent Email', key: 'parentEmail', type: 'email' },
+                ].map(field => (
+                  <div key={field.key}>
+                    <label className="block text-sm font-medium text-[#1E293B] mb-1">{field.label}</label>
+                    <input
+                      type={field.type}
+                      value={(form as any)[field.key]}
+                      onChange={e => setForm(f => ({ ...f, [field.key]: e.target.value }))}
+                      className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0D9488]"
+                    />
+                  </div>
+                ))}
+                <div>
+                  <label className="block text-sm font-medium text-[#1E293B] mb-1">Class *</label>
+                  <select value={form.class} onChange={e => setForm(f => ({ ...f, class: e.target.value }))} className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0D9488]">
+                    <option value="">Select Class</option>
+                    {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#1E293B] mb-1">Section *</label>
+                  <select value={form.section} onChange={e => setForm(f => ({ ...f, section: e.target.value }))} className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0D9488]">
+                    <option value="">Select Section</option>
+                    {SECTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#1E293B] mb-1">Gender</label>
+                  <select value={form.gender} onChange={e => setForm(f => ({ ...f, gender: e.target.value }))} className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0D9488]">
+                    <option value="">Select Gender</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
               </div>
             </div>
             <div className="sticky bottom-0 bg-white border-t border-[#E2E8F0] px-6 py-4 flex gap-3">
               <button onClick={() => setShowModal(false)} className="flex-1 border border-[#E2E8F0] text-[#64748B] py-2 rounded-lg text-sm hover:bg-gray-50">Cancel</button>
-              <button onClick={handleSave} disabled={saving} className="flex-1 bg-[#0D9488] text-white py-2 rounded-lg text-sm font-semibold hover:bg-[#0f766e] disabled:opacity-60">
-                {saving ? 'Saving...' : 'Save Student'}
+              <button onClick={handleSave} disabled={saving || uploadingPhoto} className="flex-1 bg-[#0D9488] text-white py-2 rounded-lg text-sm font-semibold hover:bg-[#0f766e] disabled:opacity-60">
+                {saving || uploadingPhoto ? 'Saving...' : 'Save Student'}
               </button>
             </div>
           </div>

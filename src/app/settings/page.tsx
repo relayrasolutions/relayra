@@ -34,7 +34,7 @@ export default function SettingsPage() {
   const fetchSchool = useCallback(async () => {
     if (!user?.schoolId) {
       setLoading(false);
-      setLoadError('No school linked to your account.');
+      setLoadError('No school linked to your account. Please contact your administrator.');
       return;
     }
     setLoading(true);

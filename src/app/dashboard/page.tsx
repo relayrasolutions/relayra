@@ -55,7 +55,10 @@ export default function DashboardPage() {
   const [emergencySending, setEmergencySending] = useState(false);
 
   const fetchDashboard = useCallback(async () => {
-    if (!user?.schoolId) return;
+    if (!user?.schoolId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const today = new Date().toISOString().split('T')[0];

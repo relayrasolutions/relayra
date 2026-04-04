@@ -76,27 +76,23 @@ export default function FeesPage() {
       }));
       setFees(mapped);
 
-      // Stats
-      const allFees = mapped;
-      const totalGenerated = allFees.reduce((s, f) => s + f.totalAmount, 0);
-      const totalCollected = allFees.reduce((s, f) => s + f.paidAmount, 0);
+      const totalGenerated = mapped.reduce((s, f) => s + f.totalAmount, 0);
+      const totalCollected = mapped.reduce((s, f) => s + f.paidAmount, 0);
       const totalPending = totalGenerated - totalCollected;
       setStats({ totalGenerated, totalCollected, totalPending, collectionRate: totalGenerated > 0 ? Math.round((totalCollected / totalGenerated) * 100) : 0 });
 
-      // Pie
-      const paid = allFees.filter(f => f.status === 'paid').length;
-      const pending = allFees.filter(f => f.status === 'pending' || f.status === 'partial').length;
-      const overdue = allFees.filter(f => f.status === 'overdue').length;
+      const paid = mapped.filter(f => f.status === 'paid').length;
+      const pending = mapped.filter(f => f.status === 'pending' || f.status === 'partial').length;
+      const overdue = mapped.filter(f => f.status === 'overdue').length;
       setPieData([{ name: 'Paid', value: paid }, { name: 'Pending', value: pending }, { name: 'Overdue', value: overdue }]);
 
-      // Monthly bar
       const monthly: any[] = [];
       for (let i = 5; i >= 0; i--) {
         const d = new Date(); d.setMonth(d.getMonth() - i);
         const monthName = d.toLocaleString('default', { month: 'short' });
         const mStart = new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0];
         const mEnd = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0];
-        const amount = allFees.filter(f => f.paymentDate && f.paymentDate >= mStart && f.paymentDate <= mEnd).reduce((s, f) => s + f.paidAmount, 0);
+        const amount = mapped.filter(f => f.paymentDate && f.paymentDate >= mStart && f.paymentDate <= mEnd).reduce((s, f) => s + f.paidAmount, 0);
         monthly.push({ month: monthName, amount: Math.round(amount / 100) });
       }
       setMonthlyData(monthly);
@@ -185,6 +181,105 @@ export default function FeesPage() {
     }
   };
 
+  const generatePDFReceipt = async (feeRecord: FeeRecord, paymentAmount: number, method: string, receipt: string) => {
+    try {
+      const { default: jsPDF } = await import('jspdf');
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a5' });
+
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const today = new Date();
+      const dateStr = today.toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' });
+
+      // Header
+      doc.setFillColor(13, 148, 136);
+      doc.rect(0, 0, pageWidth, 25, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(16);
+      doc.setFont('helvetica', 'bold');
+      doc.text('RELAYRA SCHOOL MANAGEMENT', pageWidth / 2, 10, { align: 'center' });
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.text('Fee Payment Receipt', pageWidth / 2, 18, { align: 'center' });
+
+      // Receipt details box
+      doc.setTextColor(30, 58, 95);
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`Receipt No: ${receipt}`, 10, 33);
+      doc.text(`Date: ${dateStr}`, pageWidth - 10, 33, { align: 'right' });
+
+      // Divider
+      doc.setDrawColor(13, 148, 136);
+      doc.setLineWidth(0.5);
+      doc.line(10, 37, pageWidth - 10, 37);
+
+      // Student info
+      doc.setTextColor(100, 116, 139);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.text('STUDENT DETAILS', 10, 44);
+
+      doc.setTextColor(30, 41, 59);
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      doc.text(feeRecord.studentName, 10, 51);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.text(`Class: ${feeRecord.class} - ${feeRecord.section}`, 10, 57);
+
+      // Fee details
+      doc.setDrawColor(226, 232, 240);
+      doc.setLineWidth(0.3);
+      doc.line(10, 62, pageWidth - 10, 62);
+
+      doc.setTextColor(100, 116, 139);
+      doc.setFontSize(8);
+      doc.text('FEE DETAILS', 10, 68);
+
+      const rows = [
+        ['Fee Type', feeRecord.feeType.charAt(0).toUpperCase() + feeRecord.feeType.slice(1)],
+        ['Description', feeRecord.description || '-'],
+        ['Total Fee', formatCurrency(feeRecord.totalAmount)],
+        ['Amount Paid', formatCurrency(paymentAmount)],
+        ['Payment Method', method.toUpperCase()],
+        ['Due Date', formatDate(feeRecord.dueDate)],
+      ];
+
+      let y = 75;
+      rows.forEach(([label, value]) => {
+        doc.setTextColor(100, 116, 139);
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        doc.text(label, 10, y);
+        doc.setTextColor(30, 41, 59);
+        doc.setFont('helvetica', 'bold');
+        doc.text(value, pageWidth - 10, y, { align: 'right' });
+        y += 7;
+      });
+
+      // Total paid highlight
+      doc.setFillColor(240, 253, 250);
+      doc.roundedRect(10, y + 2, pageWidth - 20, 12, 2, 2, 'F');
+      doc.setTextColor(13, 148, 136);
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Amount Paid:', 15, y + 10);
+      doc.text(formatCurrency(paymentAmount), pageWidth - 15, y + 10, { align: 'right' });
+
+      // Footer
+      doc.setTextColor(148, 163, 184);
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'normal');
+      doc.text('This is a computer-generated receipt. No signature required.', pageWidth / 2, y + 22, { align: 'center' });
+      doc.text('Powered by Relayra Solutions', pageWidth / 2, y + 27, { align: 'center' });
+
+      doc.save(`receipt_${receipt}.pdf`);
+      toast.success('PDF receipt downloaded');
+    } catch (err: any) {
+      toast.error('PDF generation failed: ' + err.message);
+    }
+  };
+
   const handleMarkPaid = async () => {
     if (!showPayModal) return;
     const amountPaisa = Math.round(parseFloat(payForm.amount) * 100);
@@ -212,6 +307,10 @@ export default function FeesPage() {
       });
 
       toast.success('Payment recorded successfully');
+
+      // Generate PDF receipt
+      await generatePDFReceipt(showPayModal, amountPaisa, payForm.method, receipt);
+
       setShowPayModal(null);
       setPayForm({ method: 'cash', reference: '', amount: '' });
       fetchFees();
@@ -219,6 +318,35 @@ export default function FeesPage() {
       toast.error(err.message || 'Failed to record payment');
     } finally {
       setPaying(false);
+    }
+  };
+
+  // Export to Excel
+  const handleExportExcel = async () => {
+    try {
+      const XLSX = await import('xlsx');
+      const exportData = fees.map(f => ({
+        'Student Name': f.studentName,
+        'Class': f.class,
+        'Section': f.section,
+        'Fee Type': f.feeType,
+        'Description': f.description || '',
+        'Total Amount (Rs.)': (f.totalAmount / 100).toFixed(2),
+        'Paid Amount (Rs.)': (f.paidAmount / 100).toFixed(2),
+        'Pending Amount (Rs.)': ((f.totalAmount - f.paidAmount) / 100).toFixed(2),
+        'Due Date': formatDate(f.dueDate),
+        'Status': f.status,
+        'Payment Date': f.paymentDate ? formatDate(f.paymentDate) : '',
+        'Payment Method': f.paymentMethod || '',
+        'Receipt Number': f.receiptNumber || '',
+      }));
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Fee Records');
+      XLSX.writeFile(wb, `fee_records_${new Date().toISOString().split('T')[0]}.xlsx`);
+      toast.success('Fee records exported to Excel');
+    } catch (err: any) {
+      toast.error('Export failed: ' + err.message);
     }
   };
 
@@ -238,10 +366,15 @@ export default function FeesPage() {
       <div className="space-y-5">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-[#1E293B]">Fee Management</h1>
-          <button onClick={() => setShowCreateModal(true)} className="bg-[#0D9488] text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#0f766e] flex items-center gap-2">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-            Create Fee
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={handleExportExcel} className="bg-white border border-[#E2E8F0] text-[#1E293B] px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#F8FAFC] flex items-center gap-2">
+              📊 Export Excel
+            </button>
+            <button onClick={() => setShowCreateModal(true)} className="bg-[#0D9488] text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#0f766e] flex items-center gap-2">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+              Create Fee
+            </button>
+          </div>
         </div>
 
         {/* Tabs */}
@@ -255,7 +388,6 @@ export default function FeesPage() {
           <div className="flex justify-center py-12"><svg className="animate-spin w-6 h-6 text-[#0D9488]" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg></div>
         ) : activeTab === 'overview' ? (
           <div className="space-y-5">
-            {/* Stats */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {[
                 { label: 'Total Generated', value: formatCurrency(stats?.totalGenerated || 0), color: 'text-[#1E293B]' },
@@ -299,7 +431,6 @@ export default function FeesPage() {
           </div>
         ) : (
           <div className="space-y-4">
-            {/* Filters */}
             <div className="bg-white rounded-xl p-4 shadow-sm border border-[#E2E8F0] flex flex-wrap gap-3">
               <select value={filterClass} onChange={e => setFilterClass(e.target.value)} className="px-3 py-2 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0D9488]">
                 <option value="">All Classes</option>
@@ -500,10 +631,14 @@ export default function FeesPage() {
                 <input type="number" value={payForm.amount} onChange={e => setPayForm(f => ({ ...f, amount: e.target.value }))} className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0D9488]" />
               </div>
             </div>
+            <div className="flex items-center gap-2 mt-3 p-2 bg-green-50 rounded-lg border border-green-200">
+              <svg className="w-4 h-4 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              <p className="text-xs text-green-700">A PDF receipt will be automatically downloaded after payment</p>
+            </div>
             <div className="flex gap-3 mt-4">
               <button onClick={() => setShowPayModal(null)} className="flex-1 border border-[#E2E8F0] text-[#64748B] py-2 rounded-lg text-sm hover:bg-gray-50">Cancel</button>
               <button onClick={handleMarkPaid} disabled={paying} className="flex-1 bg-[#0D9488] text-white py-2 rounded-lg text-sm font-semibold hover:bg-[#0f766e] disabled:opacity-60">
-                {paying ? 'Processing...' : 'Confirm Payment'}
+                {paying ? 'Processing...' : 'Confirm & Download Receipt'}
               </button>
             </div>
           </div>
