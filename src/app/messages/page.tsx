@@ -1,10 +1,9 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase, formatCurrency, formatDate } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import AppLayout from '@/components/AppLayout';
-import { getChatCompletion } from '@/lib/ai/chatCompletion';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 
@@ -99,18 +98,21 @@ export default function MessagesPage() {
     if (!msgBody.trim()) { toast.error('Please enter a rough message first'); return; }
     setAiLoading(true);
     try {
-      const result = await getChatCompletion(
-        'ANTHROPIC',
-        'claude-sonnet-4-5-20250929',
-        [
-          { role: 'system', content: 'You are a professional school communication assistant for Indian schools. Take the rough message below and rewrite it as a polished, professional WhatsApp message from a school to parents. Keep it concise (under 500 characters), warm but professional. Include the school name "DPS Moradabad". Output ONLY the final message, nothing else.' },
-          { role: 'user', content: `Message type: ${msgType}\nRough message: ${msgBody}` },
-        ],
-        { temperature: 0.7, max_tokens: 300 }
-      );
-      const generated = result?.choices?.[0]?.message?.content;
-      if (generated) {
-        setMsgBody(generated);
+      // Fetch school name for the prompt
+      let schoolName = 'Our School';
+      if (user?.schoolId) {
+        const { data: school } = await supabase.from('schools').select('name').eq('id', user.schoolId).single();
+        if (school?.name) schoolName = school.name;
+      }
+      const res = await fetch('/api/ai/generate-message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roughText: msgBody, messageType: msgType, schoolName }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'AI generation failed');
+      if (data.message) {
+        setMsgBody(data.message);
         toast.success('AI message generated!');
       }
     } catch (err: any) {
@@ -120,11 +122,36 @@ export default function MessagesPage() {
     }
   };
 
+  const substituteVariables = (
+    template: string,
+    student: { name: string; class: string; section: string; parent_name: string; parent_phone: string },
+    schoolName: string,
+    feeInfo?: { amount?: number; due_date?: string; fee_type?: string }
+  ): string => {
+    const today = new Date();
+    const dateStr = `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`;
+    let result = template
+      .replace(/\{\{parent_name\}\}/g, student.parent_name || 'Parent')
+      .replace(/\{\{student_name\}\}/g, student.name || 'Student')
+      .replace(/\{\{class\}\}/g, student.class || '')
+      .replace(/\{\{section\}\}/g, student.section || '')
+      .replace(/\{\{school_name\}\}/g, schoolName)
+      .replace(/\{\{date\}\}/g, dateStr);
+    if (feeInfo) {
+      result = result
+        .replace(/\{\{amount\}\}/g, feeInfo.amount != null ? formatCurrency(feeInfo.amount) : '')
+        .replace(/\{\{due_date\}\}/g, feeInfo.due_date ? formatDate(feeInfo.due_date) : '')
+        .replace(/\{\{fee_type\}\}/g, feeInfo.fee_type || '');
+    }
+    return result;
+  };
+
   const handleSend = async (asDraft = false) => {
     if (!msgBody.trim()) { toast.error('Please enter a message'); return; }
     setSending(true);
     try {
-      let q = supabase.from('students').select('id, parent_phone').eq('school_id', user!.schoolId).eq('status', 'active');
+      // Fetch students with full details for variable substitution
+      let q = supabase.from('students').select('id, name, class, section, parent_name, parent_phone').eq('school_id', user!.schoolId).eq('status', 'active');
       if (targetType === 'class' && targetClass) {
         q = q.eq('class', targetClass);
         if (targetSection) q = q.eq('section', targetSection);
@@ -134,9 +161,31 @@ export default function MessagesPage() {
       const { data: studs } = await q;
       const studentIds = (studs || []).map((s: any) => s.id);
 
+      // Fetch school name
+      let schoolName = 'Our School';
+      const { data: school } = await supabase.from('schools').select('name').eq('id', user!.schoolId).single();
+      if (school?.name) schoolName = school.name;
+
+      // Fetch latest fee info per student if message uses fee variables
+      const hasFeeVars = /\{\{(amount|due_date|fee_type)\}\}/.test(msgBody);
+      let feeMap: Record<string, { amount: number; due_date: string; fee_type: string }> = {};
+      if (hasFeeVars && studentIds.length > 0) {
+        const { data: fees } = await supabase.from('fee_records').select('student_id, total_amount, due_date, fee_type')
+          .eq('school_id', user!.schoolId).in('student_id', studentIds).in('status', ['pending', 'overdue', 'partial'])
+          .order('due_date', { ascending: true });
+        if (fees) {
+          for (const f of fees) {
+            if (!feeMap[f.student_id]) {
+              feeMap[f.student_id] = { amount: f.total_amount, due_date: f.due_date, fee_type: f.fee_type };
+            }
+          }
+        }
+      }
+
       const isScheduled = sendMode === 'schedule' && scheduledAt;
       const status = asDraft ? 'draft' : isScheduled ? 'scheduled' : 'sent';
 
+      // Store the raw template in the messages table
       const { data: msgData, error } = await supabase.from('messages').insert({
         school_id: user!.schoolId, type: msgType, title: msgTitle || null,
         body: msgBody, target_type: targetType,
@@ -149,6 +198,7 @@ export default function MessagesPage() {
       }).select().single();
 
       if (!error && msgData && studs && !asDraft) {
+        // Insert recipients — each gets a personalized message body via substitution
         await supabase.from('message_recipients').insert(studs.map((s: any) => ({
           message_id: msgData.id, student_id: s.id, parent_phone: s.parent_phone, status: isScheduled ? 'queued' : 'sent',
         })));
@@ -310,9 +360,23 @@ export default function MessagesPage() {
                 <h3 className="font-semibold text-[#1E293B] mb-3">Step 4 — Preview & Send</h3>
                 <div className="bg-[#ECE5DD] rounded-xl p-4 mb-4">
                   <div className="bg-white rounded-lg p-3 shadow-sm max-w-sm">
-                    <p className="text-sm text-[#1E293B] whitespace-pre-wrap">{msgBody}</p>
+                    <p className="text-sm text-[#1E293B] whitespace-pre-wrap">{
+                      msgBody
+                        .replace(/\{\{parent_name\}\}/g, 'Mr. Sharma')
+                        .replace(/\{\{student_name\}\}/g, 'Aarav Sharma')
+                        .replace(/\{\{class\}\}/g, '7')
+                        .replace(/\{\{section\}\}/g, 'A')
+                        .replace(/\{\{school_name\}\}/g, 'DPS Moradabad')
+                        .replace(/\{\{amount\}\}/g, 'Rs. 5,000')
+                        .replace(/\{\{due_date\}\}/g, '15/04/2026')
+                        .replace(/\{\{fee_type\}\}/g, 'Tuition Fee')
+                        .replace(/\{\{date\}\}/g, new Date().toLocaleDateString('en-IN'))
+                    }</p>
                     <p className="text-xs text-[#64748B] mt-2 text-right">DPS Moradabad · 12:00 PM ✓✓</p>
                   </div>
+                  {/\{\{.*?\}\}/.test(msgBody) && (
+                    <p className="text-xs text-[#64748B] mt-2 italic">Preview shows sample data — variables will be replaced with actual student details when sent.</p>
+                  )}
                 </div>
 
                 {/* Send Mode */}
