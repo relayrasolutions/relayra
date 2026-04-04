@@ -25,20 +25,33 @@ export default function LoginPage() {
     setLoading(true);
     setLoadingMessage('Signing in...');
 
-    const { error } = await signIn(email, password);
-    if (error) {
-      console.error('[Login] signIn returned error:', error);
-      toast.error(error || 'Invalid credentials');
+    console.log('[Login] Step 1: Calling Supabase Auth signInWithPassword for:', email);
+
+    const { error: signInError } = await signIn(email, password);
+    if (signInError) {
+      console.error('[Login] Step 1 FAILED — signIn returned error:', signInError);
+      toast.error(signInError || 'Invalid credentials');
       setLoading(false);
       return;
     }
 
+    console.log('[Login] Step 1 SUCCESS — Supabase Auth login succeeded');
     setLoadingMessage('Loading your profile...');
 
     try {
-      // Get the authenticated session
-      const { data: { session } } = await supabase.auth.getSession();
+      // Step 2: Get the authenticated session to retrieve UUID
+      console.log('[Login] Step 2: Getting session to retrieve auth UUID...');
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+      if (sessionError) {
+        console.error('[Login] Step 2 FAILED — getSession error:', sessionError);
+        toast.error('Session error. Please try again.');
+        setLoading(false);
+        return;
+      }
+
       if (!session?.user) {
+        console.error('[Login] Step 2 FAILED — No session/user found after successful login');
         toast.error('Session not found. Please try again.');
         setLoading(false);
         return;
@@ -46,79 +59,127 @@ export default function LoginPage() {
 
       const authUserId = session.user.id;
       const userEmail = session.user.email || email;
+      console.log('[Login] Step 2 SUCCESS — Auth UUID:', authUserId, '| Email:', userEmail);
 
-      // Try to fetch existing user record
-      let { data: userData, error: fetchError } = await supabase
+      // Step 3: Look up users table by auth_id
+      console.log('[Login] Step 3: Looking up users table by auth_id =', authUserId);
+      const { data: userByAuthId, error: authIdError } = await supabase
         .from('users')
-        .select('role, school_id, name')
+        .select('id, role, school_id, name, auth_id, email')
         .eq('auth_id', authUserId)
-        .single();
+        .maybeSingle();
 
-      // If no record found, auto-provision using the database function
-      if (fetchError || !userData) {
+      console.log('[Login] Step 3 result — data:', userByAuthId, '| error:', authIdError);
+
+      let userData: { role: string; school_id: string | null; name: string } | null = null;
+
+      if (userByAuthId) {
+        // Found by auth_id — use directly
+        console.log('[Login] Step 3 SUCCESS — Found user by auth_id. Role:', userByAuthId.role);
+        userData = { role: userByAuthId.role, school_id: userByAuthId.school_id, name: userByAuthId.name };
+      } else {
+        // Step 4: No match by auth_id — try email lookup
+        console.log('[Login] Step 3 MISS — No user found by auth_id. Step 4: Looking up by email =', userEmail);
         setLoadingMessage('Setting up your account...');
 
-        const { data: provisionedData, error: provisionError } = await supabase
-          .rpc('auto_provision_user', {
-            p_auth_id: authUserId,
-            p_email: userEmail,
-          });
+        const { data: userByEmail, error: emailError } = await supabase
+          .from('users')
+          .select('id, role, school_id, name, auth_id, email')
+          .eq('email', userEmail)
+          .maybeSingle();
 
-        if (provisionError || !provisionedData || provisionedData.length === 0) {
-          // Fallback: try direct insert based on known emails
-          const roleMap: Record<string, { role: string; name: string }> = {
-            'admin@relayrasolutions.com': { role: 'super_admin', name: 'Relayra Admin' },
-            'admin@dps-moradabad.com': { role: 'school_admin', name: 'DPS Admin' },
-            'teacher.7a@dps-moradabad.com': { role: 'school_staff', name: 'Class 7-A Teacher' },
+        console.log('[Login] Step 4 result — data:', userByEmail, '| error:', emailError);
+
+        if (userByEmail) {
+          // Found by email — update auth_id to current UUID
+          console.log('[Login] Step 4 SUCCESS — Found user by email. Old auth_id:', userByEmail.auth_id, '→ Updating to:', authUserId);
+
+          const { error: updateError } = await supabase
+            .from('users')
+            .update({ auth_id: authUserId })
+            .eq('id', userByEmail.id);
+
+          if (updateError) {
+            console.error('[Login] Step 4 UPDATE FAILED — Could not update auth_id:', updateError);
+            // Still proceed with the data we have
+          } else {
+            console.log('[Login] Step 4 UPDATE SUCCESS — auth_id updated in users table');
+          }
+
+          userData = { role: userByEmail.role, school_id: userByEmail.school_id, name: userByEmail.name };
+        } else {
+          // Step 5: No email match either — create new user record
+          console.log('[Login] Step 4 MISS — No user found by email either. Step 5: Creating new user record...');
+
+          // Determine role from known email patterns
+          let role = 'school_admin';
+          let name = userEmail.split('@')[0];
+          let schoolId: string | null = null;
+
+          if (userEmail.toLowerCase().includes('relayrasolutions')) {
+            role = 'super_admin';
+            name = 'Relayra Admin';
+          } else if (userEmail.toLowerCase().includes('teacher')) {
+            role = 'school_staff';
+            name = 'Teacher';
+          }
+
+          // Try to get a school_id if not super_admin
+          if (role !== 'super_admin') {
+            const { data: schoolData } = await supabase
+              .from('schools')
+              .select('id')
+              .limit(1)
+              .single();
+            schoolId = schoolData?.id || null;
+            console.log('[Login] Step 5 — Resolved school_id:', schoolId);
+          }
+
+          const newUserPayload = {
+            auth_id: authUserId,
+            email: userEmail,
+            role,
+            name,
+            school_id: schoolId,
+            is_active: true,
           };
 
-          const mapped = roleMap[userEmail.toLowerCase()];
-          if (mapped) {
-            // Get school_id for school-linked users
-            let schoolId: string | null = null;
-            if (mapped.role !== 'super_admin') {
-              const { data: schoolData } = await supabase
-                .from('schools')
-                .select('id')
-                .eq('slug', 'dps-moradabad')
-                .single();
-              schoolId = schoolData?.id || null;
-            }
+          console.log('[Login] Step 5 — Inserting new user:', newUserPayload);
 
-            await supabase.from('users').upsert({
-              auth_id: authUserId,
-              email: userEmail,
-              role: mapped.role,
-              name: mapped.name,
-              school_id: schoolId,
-              assigned_class: userEmail === 'teacher.7a@dps-moradabad.com' ? '7' : null,
-              assigned_section: userEmail === 'teacher.7a@dps-moradabad.com' ? 'A' : null,
-              is_active: true,
-            }, { onConflict: 'auth_id' });
+          const { data: newUser, error: insertError } = await supabase
+            .from('users')
+            .insert(newUserPayload)
+            .select('role, school_id, name')
+            .single();
 
-            userData = { role: mapped.role, school_id: schoolId, name: mapped.name };
-          } else {
-            toast.error('Could not set up your account. Please contact support.');
+          if (insertError) {
+            console.error('[Login] Step 5 INSERT FAILED:', insertError);
+            toast.error('Could not create user record. Please contact support.');
             setLoading(false);
             return;
           }
-        } else {
-          userData = provisionedData[0];
+
+          console.log('[Login] Step 5 SUCCESS — New user created:', newUser);
+          userData = newUser;
         }
       }
 
+      // Step 6: Redirect based on role
       setLoadingMessage('Redirecting...');
+      console.log('[Login] Step 6: Redirecting. Role =', userData?.role);
 
-      // Redirect based on role
       if (userData?.role === 'super_admin') {
+        console.log('[Login] Step 6 → Redirecting to /admin');
         router.push('/admin');
       } else if (userData?.role === 'school_staff') {
+        console.log('[Login] Step 6 → Redirecting to /teacher');
         router.push('/teacher');
       } else {
+        console.log('[Login] Step 6 → Redirecting to /dashboard');
         router.push('/dashboard');
       }
     } catch (err) {
-      console.error('Login redirect error:', err);
+      console.error('[Login] Unexpected error in post-login flow:', err);
       toast.error('Login succeeded but redirect failed. Please refresh.');
       setLoading(false);
     }
