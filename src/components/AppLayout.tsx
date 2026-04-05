@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/lib/supabase';
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: (
@@ -60,6 +61,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, signOut, loading } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [today, setToday] = useState('');
+  const [schoolName, setSchoolName] = useState('');
 
   useEffect(() => {
     const now = new Date();
@@ -68,6 +70,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     const year = now.getFullYear();
     setToday(`${day}/${month}/${year}`);
   }, []);
+
+  const fetchSchoolName = useCallback(async () => {
+    if (user?.schoolId) {
+      const { data } = await supabase.from('schools').select('name').eq('id', user.schoolId).single();
+      if (data?.name) setSchoolName(data.name);
+    }
+  }, [user?.schoolId]);
+
+  useEffect(() => {
+    fetchSchoolName();
+  }, [fetchSchoolName]);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -183,7 +196,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </svg>
             </button>
             <div>
-              <p className="text-[#1E293B] font-semibold text-sm lg:text-base">{user.role === 'super_admin' ? 'Relayra Solutions' : 'DPS Moradabad'}</p>
+              <p className="text-[#1E293B] font-semibold text-sm lg:text-base">{user.role === 'super_admin' ? 'Relayra Solutions' : (schoolName || 'School Dashboard')}</p>
               <p className="text-[#64748B] text-xs">{today}</p>
             </div>
           </div>

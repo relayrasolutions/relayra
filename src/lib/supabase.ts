@@ -59,10 +59,12 @@ export interface Student {
   photoUrl: string | null;
   address: string | null;
   busRoute: string | null;
+  motherName: string | null;
   parentName: string;
   parentPhone: string;
   secondaryPhone: string | null;
   parentEmail: string | null;
+  religion: string | null;
   status: string;
   notes: string | null;
   createdAt: string;
