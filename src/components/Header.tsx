@@ -5,7 +5,7 @@ import AppLogo from '@/components/ui/AppLogo';
 import Icon from '@/components/ui/AppIcon';
 
 const navLinks = [
-  { label: 'Home', href: '/homepage' },
+  { label: 'Home', href: '/' },
   { label: 'Features', href: '/features' },
   { label: 'Pricing', href: '/pricing' },
 ];
@@ -38,7 +38,7 @@ export default function Header() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 lg:h-18">
           {/* Logo */}
-          <Link href="/homepage" className="flex items-center gap-2.5 group">
+          <Link href="/" className="flex items-center gap-2.5 group">
             <AppLogo
               size={36}
               className="group-hover:scale-105 transition-transform duration-300"
@@ -64,6 +64,12 @@ export default function Header() {
 
           {/* Desktop CTA */}
           <div className="hidden md:flex items-center gap-3">
+            <Link
+              href="/login"
+              className="px-4 py-2 text-sm font-medium text-text-secondary hover:text-primary transition-colors duration-200 rounded-btn hover:bg-primary/5"
+            >
+              Login
+            </Link>
             <a
               href="https://wa.me/91XXXXXXXXXX?text=Hi%2C+I%27d+like+to+book+a+demo+for+Relayra+Solutions"
               target="_blank"
@@ -102,6 +108,13 @@ export default function Header() {
                 {link?.label}
               </Link>
             ))}
+            <Link
+              href="/login"
+              onClick={() => setMobileOpen(false)}
+              className="block px-4 py-3.5 text-base font-medium text-teal hover:text-primary border-b border-border transition-colors"
+            >
+              Login →
+            </Link>
             <div className="mt-6">
               <a
                 href="https://wa.me/91XXXXXXXXXX?text=Hi%2C+I%27d+like+to+book+a+demo+for+Relayra+Solutions"
