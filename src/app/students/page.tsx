@@ -11,25 +11,30 @@ interface Student {
   rollNumber: string | null; admissionNumber: string | null;
   dateOfBirth: string | null; gender: string | null;
   address: string | null; busRoute: string | null;
+  motherName: string | null;
   parentName: string; parentPhone: string;
   secondaryPhone: string | null; parentEmail: string | null;
-  status: string; feeStatus?: string; photoUrl: string | null;
+  religion: string | null;
+  status: string; feeStatus?: string;
 }
 
 interface UploadPreviewRow {
   name: string; class: string; section: string; parentName: string; parentPhone: string;
   rollNumber?: string; admissionNumber?: string; gender?: string; address?: string;
-  busRoute?: string; parentEmail?: string;
+  busRoute?: string; parentEmail?: string; motherName?: string; religion?: string;
+  dateOfBirth?: string;
   _valid: boolean; _error?: string;
 }
 
 const CLASSES = ['Nursery', 'LKG', 'UKG', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'];
 const SECTIONS = ['A', 'B', 'C', 'D'];
+const RELIGIONS = ['Hindu', 'Muslim', 'Sikh', 'Christian', 'Jain', 'Buddhist', 'Other', 'Not Specified'];
 
 const emptyForm = {
   name: '', class: '', section: '', rollNumber: '', admissionNumber: '',
   dateOfBirth: '', gender: '', address: '', busRoute: '',
-  parentName: '', parentPhone: '', secondaryPhone: '', parentEmail: '',
+  motherName: '', parentName: '', parentPhone: '', secondaryPhone: '', parentEmail: '',
+  religion: 'Not Specified',
 };
 
 export default function StudentsPage() {
@@ -93,8 +98,10 @@ export default function StudentsPage() {
         rollNumber: s.roll_number, admissionNumber: s.admission_number,
         dateOfBirth: s.date_of_birth, gender: s.gender,
         address: s.address, busRoute: s.bus_route,
+        motherName: s.mother_name || null,
         parentName: s.parent_name, parentPhone: s.parent_phone,
         secondaryPhone: s.secondary_phone, parentEmail: s.parent_email,
+        religion: s.religion || 'Not Specified',
         status: s.status, feeStatus: feeMap[s.id] || 'paid',
         photoUrl: s.photo_url || null,
       })));
@@ -123,8 +130,10 @@ export default function StudentsPage() {
       rollNumber: s.rollNumber || '', admissionNumber: s.admissionNumber || '',
       dateOfBirth: s.dateOfBirth || '', gender: s.gender || '',
       address: s.address || '', busRoute: s.busRoute || '',
+      motherName: s.motherName || '',
       parentName: s.parentName, parentPhone: s.parentPhone,
       secondaryPhone: s.secondaryPhone || '', parentEmail: s.parentEmail || '',
+      religion: s.religion || 'Not Specified',
     });
     setPhotoFile(null);
     setPhotoPreview(s.photoUrl || null);
@@ -180,8 +189,10 @@ export default function StudentsPage() {
         roll_number: form.rollNumber || null, admission_number: form.admissionNumber || null,
         date_of_birth: form.dateOfBirth || null, gender: form.gender || null,
         address: form.address || null, bus_route: form.busRoute || null,
+        mother_name: form.motherName || null,
         parent_name: form.parentName, parent_phone: phone,
         secondary_phone: form.secondaryPhone || null, parent_email: form.parentEmail || null,
+        religion: form.religion || 'Not Specified',
       };
 
       if (editStudent) {
@@ -227,64 +238,72 @@ export default function StudentsPage() {
     fetchStudents();
   };
 
-  // Export to Excel
-  const handleExportExcel = async () => {
-    try {
-      const XLSX = await import('xlsx');
-      const exportData = students.map((s, idx) => ({
-        'S.No': (page - 1) * PAGE_SIZE + idx + 1,
-        'Name': s.name,
-        'Class': s.class,
-        'Section': s.section,
-        'Roll Number': s.rollNumber || '',
-        'Admission Number': s.admissionNumber || '',
-        'Gender': s.gender || '',
-        'Date of Birth': s.dateOfBirth || '',
-        'Parent Name': s.parentName,
-        'Parent Phone': s.parentPhone,
-        'Secondary Phone': s.secondaryPhone || '',
-        'Parent Email': s.parentEmail || '',
-        'Address': s.address || '',
-        'Bus Route': s.busRoute || '',
-        'Status': s.status,
-        'Fee Status': s.feeStatus || '',
-      }));
-      const ws = XLSX.utils.json_to_sheet(exportData);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Students');
-      XLSX.writeFile(wb, `students_${new Date().toISOString().split('T')[0]}.xlsx`);
-      toast.success('Students exported to Excel');
-    } catch (err: any) {
-      toast.error('Export failed: ' + err.message);
-    }
+  // Download CSV template
+  const downloadTemplate = () => {
+    const headers = [
+      'Student Name', 'Class', 'Section', 'Roll No', 'Father Name', 'Mother Name',
+      'Father Phone', 'Mother Phone', 'Gender', 'DOB (YYYY-MM-DD)', 'Religion', 'Address',
+    ];
+    const rows = [
+      ['Aarav Sharma', '7', 'A', '1', 'Rajesh Sharma', 'Sunita Sharma', '9876543210', '9876543211', 'Male', '2013-05-15', 'Hindu', '12 MG Road, Moradabad'],
+      ['Zainab Khan', '7', 'A', '2', 'Ahmed Khan', 'Fatima Khan', '9876543212', '9876543213', 'Female', '2013-08-20', 'Muslim', '45 Civil Lines, Moradabad'],
+      ['Gurpreet Singh', '7', 'B', '1', 'Harjinder Singh', 'Manpreet Kaur', '9876543214', '9876543215', 'Male', '2013-03-10', 'Sikh', '78 Guru Nagar, Moradabad'],
+    ];
+    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'student_import_template.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('Template downloaded');
   };
 
-  // CSV/Excel parsing
+  // CSV parsing
   const parseCSV = (text: string): UploadPreviewRow[] => {
     const lines = text.trim().split('\n');
     if (lines.length < 2) return [];
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/[^a-z_]/g, ''));
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_').replace(/_+/g, '_'));
     const rows: UploadPreviewRow[] = [];
     for (let i = 1; i < lines.length; i++) {
-      const vals = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+      // Handle quoted CSV values
+      const vals: string[] = [];
+      let current = '';
+      let inQuotes = false;
+      for (const char of lines[i]) {
+        if (char === '"') { inQuotes = !inQuotes; }
+        else if (char === ',' && !inQuotes) { vals.push(current.trim()); current = ''; }
+        else { current += char; }
+      }
+      vals.push(current.trim());
+
       const row: any = {};
       headers.forEach((h, idx) => { row[h] = vals[idx] || ''; });
-      const name = row['name'] || row['student_name'] || row['studentname'] || '';
+
+      const name = row['student_name'] || row['name'] || row['studentname'] || '';
       const cls = row['class'] || row['grade'] || '';
       const section = row['section'] || '';
-      const parentName = row['parent_name'] || row['parentname'] || row['guardian_name'] || '';
-      const parentPhone = (row['parent_phone'] || row['parentphone'] || row['phone'] || '').replace(/\D/g, '');
+      const parentName = row['father_name'] || row['parent_name'] || row['parentname'] || row['guardian_name'] || '';
+      const motherName = row['mother_name'] || row['mothername'] || '';
+      const parentPhone = (row['father_phone'] || row['parent_phone'] || row['parentphone'] || row['phone'] || '').replace(/\D/g, '');
+      const secondaryPhone = (row['mother_phone'] || row['secondary_phone'] || row['secondaryphone'] || '').replace(/\D/g, '');
+      const religion = row['religion'] || 'Not Specified';
+      const gender = row['gender'] || '';
+      const dob = row['dob__yyyy_mm_dd_'] || row['dob'] || row['date_of_birth'] || row['dateofbirth'] || '';
+      const rollNumber = row['roll_no'] || row['roll_number'] || row['rollnumber'] || row['roll'] || '';
+      const admissionNumber = row['admission_number'] || row['admissionnumber'] || row['admission'] || '';
+      const address = row['address'] || '';
+
       const valid = !!(name && cls && section && parentName && parentPhone.length === 10);
       rows.push({
         name, class: cls, section, parentName, parentPhone,
-        rollNumber: row['roll_number'] || row['rollnumber'] || row['roll'] || '',
-        admissionNumber: row['admission_number'] || row['admissionnumber'] || row['admission'] || '',
-        gender: row['gender'] || '',
-        address: row['address'] || '',
-        busRoute: row['bus_route'] || row['busroute'] || row['bus'] || '',
+        rollNumber, admissionNumber, gender, address,
+        motherName, religion, dateOfBirth: dob,
+        busRoute: row['bus_route'] || row['busroute'] || '',
         parentEmail: row['parent_email'] || row['parentemail'] || row['email'] || '',
         _valid: valid,
-        _error: !valid ? (!name ? 'Missing name' : !cls ? 'Missing class' : !section ? 'Missing section' : !parentName ? 'Missing parent name' : 'Invalid phone') : undefined,
+        _error: !valid ? (!name ? 'Missing name' : !cls ? 'Missing class' : !section ? 'Missing section' : !parentName ? 'Missing father name' : 'Invalid phone (need 10 digits)') : undefined,
       });
     }
     return rows;
@@ -303,7 +322,7 @@ export default function StudentsPage() {
       const text = ev.target?.result as string;
       const rows = parseCSV(text);
       if (rows.length === 0) {
-        toast.error('No valid rows found. Ensure CSV has headers: name, class, section, parent_name, parent_phone');
+        toast.error('No valid rows found. Download the template for correct format.');
         return;
       }
       setUploadPreview(rows);
@@ -326,8 +345,12 @@ export default function StudentsPage() {
           name: row.name, class: row.class, section: row.section,
           roll_number: row.rollNumber || null, admission_number: row.admissionNumber || null,
           gender: row.gender || null, address: row.address || null,
+          date_of_birth: row.dateOfBirth || null,
           bus_route: row.busRoute || null, parent_name: row.parentName,
+          mother_name: row.motherName || null,
           parent_phone: row.parentPhone, parent_email: row.parentEmail || null,
+          secondary_phone: row.parentPhone ? undefined : null,
+          religion: row.religion || 'Not Specified',
         });
         imported++;
       } catch { failed++; }
@@ -365,6 +388,10 @@ export default function StudentsPage() {
               onChange={handleFileChange}
               className="hidden"
             />
+            <button onClick={downloadTemplate} className="bg-white border border-[#E2E8F0] text-[#1E293B] px-3 py-2 rounded-lg text-sm font-semibold hover:bg-[#F8FAFC] flex items-center gap-1">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+              Template
+            </button>
             <button
               onClick={handleExportExcel}
               className="bg-white border border-[#E2E8F0] text-[#1E293B] px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#F8FAFC] flex items-center gap-2"
@@ -373,9 +400,10 @@ export default function StudentsPage() {
             </button>
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="bg-white border border-[#E2E8F0] text-[#1E293B] px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#F8FAFC] flex items-center gap-2"
+              className="bg-white border border-[#E2E8F0] text-[#1E293B] px-3 py-2 rounded-lg text-sm font-semibold hover:bg-[#F8FAFC] flex items-center gap-1"
             >
-              📤 Upload Excel/CSV
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+              Upload CSV
             </button>
             <button onClick={openAdd} className="bg-[#0D9488] text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#0f766e] flex items-center gap-2">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -424,9 +452,10 @@ export default function StudentsPage() {
             <div className="p-12 text-center">
               <p className="text-5xl mb-3">👨‍🎓</p>
               <p className="text-[#1E293B] font-semibold">No students found</p>
-              <p className="text-[#64748B] text-sm mt-1">Add your first student or upload a CSV/Excel file</p>
+              <p className="text-[#64748B] text-sm mt-1">Add your first student or upload a CSV file</p>
               <div className="flex gap-3 justify-center mt-4">
-                <button onClick={() => fileInputRef.current?.click()} className="bg-white border border-[#E2E8F0] text-[#1E293B] px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#F8FAFC]">📤 Upload Excel/CSV</button>
+                <button onClick={downloadTemplate} className="bg-white border border-[#E2E8F0] text-[#1E293B] px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#F8FAFC]">Download Template</button>
+                <button onClick={() => fileInputRef.current?.click()} className="bg-white border border-[#E2E8F0] text-[#1E293B] px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#F8FAFC]">Upload CSV</button>
                 <button onClick={openAdd} className="bg-[#0D9488] text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#0f766e]">Add Student</button>
               </div>
             </div>
@@ -445,6 +474,7 @@ export default function StudentsPage() {
                     <th className="px-4 py-3 text-left text-xs font-semibold text-[#64748B] uppercase tracking-wider">Roll No</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-[#64748B] uppercase tracking-wider">Parent</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-[#64748B] uppercase tracking-wider">Phone</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-[#64748B] uppercase tracking-wider">Religion</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-[#64748B] uppercase tracking-wider">Fee Status</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-[#64748B] uppercase tracking-wider">Actions</th>
                   </tr>
@@ -473,6 +503,7 @@ export default function StudentsPage() {
                       <td className="px-4 py-3 text-[#64748B]">{s.rollNumber || '-'}</td>
                       <td className="px-4 py-3 text-[#1E293B]">{s.parentName}</td>
                       <td className="px-4 py-3 text-[#64748B]">{formatPhone(s.parentPhone)}</td>
+                      <td className="px-4 py-3 text-[#64748B] text-xs">{s.religion || 'Not Specified'}</td>
                       <td className="px-4 py-3">
                         <span className={feeStatusBadge(s.feeStatus || 'paid')}>{s.feeStatus || 'paid'}</span>
                       </td>
@@ -514,39 +545,28 @@ export default function StudentsPage() {
                 </svg>
               </button>
             </div>
-            <div className="p-6 space-y-4">
-              {/* Photo Upload */}
-              <div className="flex items-center gap-4">
-                <div className="relative">
-                  {photoPreview ? (
-                    <img src={photoPreview} alt="Student photo" className="w-20 h-20 rounded-full object-cover border-2 border-[#0D9488]" />
-                  ) : (
-                    <div className="w-20 h-20 rounded-full bg-[#F1F5F9] border-2 border-dashed border-[#CBD5E1] flex items-center justify-center">
-                      <svg className="w-8 h-8 text-[#94A3B8]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <input ref={photoInputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={handlePhotoChange} className="hidden" />
-                  <button
-                    type="button"
-                    onClick={() => photoInputRef.current?.click()}
-                    className="bg-white border border-[#E2E8F0] text-[#1E293B] px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-[#F8FAFC]"
-                  >
-                    {photoPreview ? 'Change Photo' : 'Upload Photo'}
-                  </button>
-                  <p className="text-xs text-[#64748B] mt-1">JPG, PNG, WebP · Max 5MB</p>
-                  {photoPreview && (
-                    <button
-                      type="button"
-                      onClick={() => { setPhotoFile(null); setPhotoPreview(null); }}
-                      className="text-xs text-red-500 hover:text-red-700 mt-1 block"
-                    >
-                      Remove photo
-                    </button>
-                  )}
+            <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {[
+                { label: 'Student Name *', key: 'name', type: 'text' },
+                { label: 'Roll Number', key: 'rollNumber', type: 'text' },
+                { label: 'Admission Number', key: 'admissionNumber', type: 'text' },
+                { label: 'Date of Birth', key: 'dateOfBirth', type: 'date' },
+                { label: 'Address', key: 'address', type: 'text' },
+                { label: 'Bus Route', key: 'busRoute', type: 'text' },
+                { label: 'Father/Guardian Name *', key: 'parentName', type: 'text' },
+                { label: 'Mother Name', key: 'motherName', type: 'text' },
+                { label: 'Father Phone * (10 digits)', key: 'parentPhone', type: 'tel' },
+                { label: 'Mother/Secondary Phone', key: 'secondaryPhone', type: 'tel' },
+                { label: 'Parent Email', key: 'parentEmail', type: 'email' },
+              ].map(field => (
+                <div key={field.key}>
+                  <label className="block text-sm font-medium text-[#1E293B] mb-1">{field.label}</label>
+                  <input
+                    type={field.type}
+                    value={(form as any)[field.key]}
+                    onChange={e => setForm(f => ({ ...f, [field.key]: e.target.value }))}
+                    className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0D9488]"
+                  />
                 </div>
               </div>
 
@@ -597,6 +617,12 @@ export default function StudentsPage() {
                   </select>
                 </div>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-[#1E293B] mb-1">Religion</label>
+                <select value={form.religion} onChange={e => setForm(f => ({ ...f, religion: e.target.value }))} className="w-full px-3 py-2 border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#0D9488]">
+                  {RELIGIONS.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
+              </div>
             </div>
             <div className="sticky bottom-0 bg-white border-t border-[#E2E8F0] px-6 py-4 flex gap-3">
               <button onClick={() => setShowModal(false)} className="flex-1 border border-[#E2E8F0] text-[#64748B] py-2 rounded-lg text-sm hover:bg-gray-50">Cancel</button>
@@ -627,8 +653,8 @@ export default function StudentsPage() {
             </div>
             <div className="overflow-y-auto flex-1 p-4">
               <div className="mb-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                <p className="text-xs text-blue-700 font-medium">Required columns: name, class, section, parent_name, parent_phone</p>
-                <p className="text-xs text-blue-600 mt-0.5">Optional: roll_number, admission_number, gender, address, bus_route, parent_email</p>
+                <p className="text-xs text-blue-700 font-medium">Required: Student Name, Class, Section, Father Name, Father Phone (10 digits)</p>
+                <p className="text-xs text-blue-600 mt-0.5">Optional: Roll No, Mother Name, Mother Phone, Gender, DOB, Religion, Address</p>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
@@ -638,8 +664,9 @@ export default function StudentsPage() {
                       <th className="px-3 py-2 text-left font-semibold text-[#64748B]">Name</th>
                       <th className="px-3 py-2 text-left font-semibold text-[#64748B]">Class</th>
                       <th className="px-3 py-2 text-left font-semibold text-[#64748B]">Section</th>
-                      <th className="px-3 py-2 text-left font-semibold text-[#64748B]">Parent Name</th>
-                      <th className="px-3 py-2 text-left font-semibold text-[#64748B]">Parent Phone</th>
+                      <th className="px-3 py-2 text-left font-semibold text-[#64748B]">Father Name</th>
+                      <th className="px-3 py-2 text-left font-semibold text-[#64748B]">Phone</th>
+                      <th className="px-3 py-2 text-left font-semibold text-[#64748B]">Religion</th>
                       <th className="px-3 py-2 text-left font-semibold text-[#64748B]">Error</th>
                     </tr>
                   </thead>
@@ -652,6 +679,7 @@ export default function StudentsPage() {
                         <td className="px-3 py-2">{row.section || '-'}</td>
                         <td className="px-3 py-2">{row.parentName || '-'}</td>
                         <td className="px-3 py-2">{row.parentPhone || '-'}</td>
+                        <td className="px-3 py-2">{row.religion || '-'}</td>
                         <td className="px-3 py-2 text-red-600">{row._error || ''}</td>
                       </tr>
                     ))}
