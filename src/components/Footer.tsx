@@ -7,19 +7,15 @@ const footerLinks = {
   Product: [
     { label: 'Features', href: '/features' },
     { label: 'Pricing', href: '/pricing' },
-    { label: 'How It Works', href: '/homepage#how-it-works' },
+    { label: 'How It Works', href: '/how-it-works' },
   ],
   Resources: [
     { label: 'Blog', href: '/blog' },
-    { label: 'Case Studies', href: '/blog?category=case-studies' },
-  ],
-  Company: [
     { label: 'About Us', href: '/about' },
-    { label: 'Contact', href: '/contact' },
   ],
   Legal: [
-    { label: 'Privacy Policy', href: '#' },
-    { label: 'Terms of Service', href: '#' },
+    { label: 'Privacy Policy', href: '/privacy-policy' },
+    { label: 'Terms of Service', href: '/terms-of-service' },
   ],
 };
 
@@ -29,12 +25,12 @@ export default function Footer() {
       {/* Top CTA Banner */}
       <div className="guarantee-banner mx-4 sm:mx-6 lg:mx-8 mt-0 mb-0 rounded-2xl px-8 py-10 flex flex-col md:flex-row items-center justify-between gap-6">
         <div>
-          <p className="section-label text-teal-light mb-2">Get Started Today</p>
+          <p className="text-xs font-700 uppercase tracking-wider text-teal-light mb-2">Get Started Today</p>
           <h3 className="font-display text-2xl md:text-3xl font-700 text-white leading-tight">
-            Ready to recover your school's fees?
+            Eliminate Your School&apos;s Daily Admin Chaos
           </h3>
           <p className="text-white/70 mt-2 text-sm max-w-md">
-            Join 500+ schools already using Relayra to automate fee collection and parent communication.
+            Join schools using Relayra&apos;s managed WhatsApp platform to automate fee collection, parent communication, and attendance tracking.
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-3 flex-shrink-0">
@@ -65,7 +61,7 @@ export default function Footer() {
               <span className="font-display font-700 text-lg text-white">Relayra</span>
             </div>
             <p className="text-white/60 text-sm leading-relaxed max-w-xs">
-              Revenue Recovery & Communication Intelligence Platform for Indian schools.
+              Managed operations automation platform for Indian private schools. WhatsApp-first.
             </p>
             <div className="flex items-center gap-2 mt-4">
               <span className="w-2 h-2 rounded-full bg-success pulse-dot"></span>
@@ -136,10 +132,10 @@ export default function Footer() {
         {/* Bottom Bar */}
         <div className="border-t border-white/10 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-xs text-white/40">
-            © 2026 Relayra Solutions. All rights reserved.
+            &copy; 2026 Relayra Solutions. All rights reserved.
           </p>
           <p className="text-xs text-white/30">
-            Made with ♥ for Indian schools
+            Made with &#9829; for Indian schools
           </p>
         </div>
       </div>
