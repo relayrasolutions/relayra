@@ -2,11 +2,9 @@ import React from 'react';
 import Icon from '@/components/ui/AppIcon';
 
 const escalationLevels = [
-  { level: 1, tone: 'Gentle Reminder', color: '#10B981', delay: 'Day 1', message: 'Dear Parent, this is a friendly reminder that fees are due...' },
-  { level: 2, tone: 'Follow-up', color: '#F59E0B', delay: 'Day 5', message: 'We noticed the fee payment is still pending. Please pay at your earliest...' },
-  { level: 3, tone: 'Firm Notice', color: '#F97316', delay: 'Day 10', message: 'This is an important notice regarding outstanding fees for your child...' },
-  { level: 4, tone: 'Formal Warning', color: '#EF4444', delay: 'Day 15', message: 'Despite multiple reminders, fees remain unpaid. Please contact the school...' },
-  { level: 5, tone: 'Final Notice', color: '#DC2626', delay: 'Day 20', message: 'Final notice before escalation to school management. Immediate action required...' },
+  { level: 1, tone: 'The Helpful Heads-Up', color: '#0D9488', delay: '7 Days Before', message: 'Dear Parent, a gentle heads-up that Rohan\'s Q2 fee will be due next week on [Date]. You can easily pay in advance via UPI here: [Link]' },
+  { level: 2, tone: 'The Due Date Nudge', color: '#F59E0B', delay: 'Due Date', message: 'Hi, today is the final day to clear Rohan\'s Q2 fee to avoid late charges. Please complete the payment today via our secure link: [Link]' },
+  { level: 3, tone: 'The Formal Escalation', color: '#EF4444', delay: '5 Days After', message: 'Important: Rohan\'s Q2 fee is now 5 days overdue. A late fee penalty of Rs. [Amount] has been applied. Please clear the updated balance as soon as possible.' },
 ];
 
 const paymentFeatures = [
@@ -31,13 +29,13 @@ export default function RevenueEngineSection() {
               Fee collection that works while you sleep
             </h2>
             <p className="text-text-secondary text-base leading-relaxed">
-              A 5-level automated escalation system that progresses from gentle reminders to formal notices — all via WhatsApp, all without any manual intervention.
+              A 3-level automated escalation system that progresses from gentle reminders to formal notices — all via WhatsApp, all without any manual intervention.
             </p>
           </div>
           <div className="flex items-center gap-4 bg-white rounded-xl border border-border p-5 shadow-card flex-shrink-0">
             <div className="text-center">
-              <div className="font-display font-800 text-3xl text-teal">+43%</div>
-              <div className="text-xs text-text-secondary mt-1">Avg. collection<br />improvement</div>
+              <div className="font-display font-800 text-3xl text-teal">3-Level</div>
+              <div className="text-xs text-text-secondary mt-1">Smart escalation<br />system</div>
             </div>
             <div className="w-px h-12 bg-border" />
             <div className="text-center">
@@ -52,7 +50,7 @@ export default function RevenueEngineSection() {
           {/* Left: Escalation levels */}
           <div className="reveal-left">
             <h3 className="font-display text-xl font-700 text-text-primary mb-6">
-              5-Level Escalation System
+              3-Level Escalation System
             </h3>
             <div className="space-y-3">
               {escalationLevels.map((level) => (
@@ -77,11 +75,8 @@ export default function RevenueEngineSection() {
                           {level.delay}
                         </span>
                       </div>
-                      <p className="text-text-secondary text-xs leading-relaxed truncate opacity-0 group-hover:opacity-100 transition-opacity">
-                        {level.message}
-                      </p>
-                      <p className="text-text-secondary text-xs leading-relaxed opacity-100 group-hover:opacity-0 transition-opacity absolute">
-                        Tone: {level.tone.toLowerCase()} message sent automatically
+                      <p className="text-text-secondary text-xs leading-relaxed">
+                        &ldquo;{level.message}&rdquo;
                       </p>
                     </div>
                   </div>
@@ -124,13 +119,13 @@ export default function RevenueEngineSection() {
                     Dear <strong>Mrs. Priya Mehta</strong>, Rs. 8,500 fees for <strong>Aryan (Class 7-B)</strong> are due for March. Pay securely:
                   </p>
                   <div className="mt-2 bg-teal rounded-lg p-2 text-center">
-                    <p className="text-white text-xs font-700">💳 Pay Rs. 8,500 Now</p>
+                    <p className="text-white text-xs font-700">Pay Rs. 8,500 Now</p>
                   </div>
-                  <p className="text-[10px] text-[#667781] mt-1.5 text-right">09:15 AM ✓✓</p>
+                  <p className="text-[10px] text-[#667781] mt-1.5 text-right">09:15 AM</p>
                 </div>
                 <div className="bg-[#D9FDD3] rounded-xl rounded-tr-sm p-3 max-w-[85%] ml-auto shadow-sm">
-                  <p className="text-xs text-[#1a1a1a]">✅ Payment of Rs. 8,500 received. Receipt sent.</p>
-                  <p className="text-[10px] text-[#667781] mt-1 text-right">09:23 AM ✓✓</p>
+                  <p className="text-xs text-[#1a1a1a]">Payment of Rs. 8,500 received. Receipt sent.</p>
+                  <p className="text-[10px] text-[#667781] mt-1 text-right">09:23 AM</p>
                 </div>
               </div>
             </div>
@@ -139,9 +134,9 @@ export default function RevenueEngineSection() {
 
         {/* Bottom stat banner */}
         <div className="bg-primary rounded-2xl p-8 text-center reveal delay-200">
-          <p className="text-white/60 text-sm font-600 uppercase tracking-wider mb-2">Average Result</p>
+          <p className="text-white/60 text-sm font-600 uppercase tracking-wider mb-2">Why Relayra?</p>
           <p className="font-display font-800 text-white text-2xl sm:text-3xl">
-            Schools using Relayra collect <span className="text-teal-light">43% more fees</span> in the first 90 days
+            Automate fee collection with a <span className="text-teal-light">3-level smart escalation</span> system — zero manual follow-ups
           </p>
         </div>
       </div>

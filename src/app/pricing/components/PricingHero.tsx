@@ -8,7 +8,7 @@ export default function PricingHero() {
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
         {/* Breadcrumb */}
         <div className="flex items-center justify-center gap-2 mb-6">
-          <Link href="/homepage" className="text-text-secondary hover:text-text-primary text-sm transition-colors">
+          <Link href="/" className="text-text-secondary hover:text-text-primary text-sm transition-colors">
             Home
           </Link>
           <Icon name="ChevronRightIcon" size={14} variant="outline" className="text-border" />
