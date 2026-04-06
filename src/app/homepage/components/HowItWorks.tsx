@@ -18,7 +18,7 @@ const steps = [
     title: 'We set everything up',
     description:
       'Our team configures your entire system — fee schedules, WhatsApp templates, escalation rules, and reporting. Zero effort from you.',
-    detail: 'Typically done in 3 working days',
+    detail: 'Typically done in under 48 hours',
     color: '#0D9488',
     bg: 'bg-teal/8',
   },
@@ -28,7 +28,7 @@ const steps = [
     title: 'Your revenue recovers itself',
     description:
       'Automated reminders go out, parents pay via WhatsApp, receipts are sent, and you get a daily report at 4 PM. Completely hands-off.',
-    detail: 'Average 43% improvement in collection rates',
+    detail: 'Fully automated, zero manual follow-ups',
     color: '#F59E0B',
     bg: 'bg-accent/8',
   },

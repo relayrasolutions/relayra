@@ -9,7 +9,7 @@ import HeroSection from './homepage/components/HeroSection';
 import StatsBar from './homepage/components/StatsBar';
 import FeatureBento from './homepage/components/FeatureBento';
 import HowItWorks from './homepage/components/HowItWorks';
-import TestimonialsSection from './homepage/components/TestimonialsSection';
+import EscalationSection from './homepage/components/EscalationSection';
 import PricingTeaser from './homepage/components/PricingTeaser';
 import ScrollRevealInit from './homepage/components/ScrollRevealInit';
 import ContactForm from '@/components/ContactForm';
@@ -53,7 +53,7 @@ export default function RootPage() {
         <StatsBar />
         <FeatureBento />
         <HowItWorks />
-        <TestimonialsSection />
+        <EscalationSection />
         <PricingTeaser />
         <ContactForm />
       </main>

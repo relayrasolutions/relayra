@@ -56,7 +56,7 @@ export default function HeroSection() {
           <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-full px-4 py-2 mb-8">
             <span className="w-2 h-2 rounded-full bg-teal pulse-dot"></span>
             <span className="text-xs font-600 text-white/90 tracking-wide font-display">
-              India's #1 School Revenue Recovery Platform
+              Managed WhatsApp Automation for Schools
             </span>
           </div>
 
@@ -100,9 +100,9 @@ export default function HeroSection() {
           {/* Trust signals */}
           <div className="flex flex-wrap items-center gap-6 mt-10 pt-10 border-t border-white/15">
             {[
-            { icon: 'ShieldCheckIcon', text: '15% improvement guaranteed' },
-            { icon: 'ClockIcon', text: 'Setup in 3 days' },
-            { icon: 'ChatBubbleLeftRightIcon', text: 'WhatsApp-native' }].
+            { icon: 'ChatBubbleLeftRightIcon', text: 'WhatsApp-native messaging' },
+            { icon: 'BoltIcon', text: 'Fully managed service' },
+            { icon: 'ShieldCheckIcon', text: 'No technical setup required' }].
             map((item) =>
             <div key={item.text} className="flex items-center gap-2">
                 <Icon name={item.icon as 'ShieldCheckIcon'} size={16} variant="outline" className="text-teal-light" />

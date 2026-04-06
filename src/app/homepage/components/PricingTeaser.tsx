@@ -92,21 +92,6 @@ export default function PricingTeaser() {
           ))}
         </div>
 
-        {/* Guarantee */}
-        <div className="guarantee-banner p-8 text-center reveal delay-300">
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-white/15 flex items-center justify-center flex-shrink-0">
-              <Icon name="ShieldCheckIcon" size={24} variant="outline" className="text-white" />
-            </div>
-            <div className="text-left">
-              <p className="font-display font-800 text-white text-lg">Risk-Free Guarantee</p>
-              <p className="text-white/75 text-sm">
-                If your fee collection doesn't improve by 15% in 3 months, we'll refund every rupee. No questions asked.
-              </p>
-            </div>
-          </div>
-        </div>
-
         {/* View full pricing */}
         <div className="text-center mt-8 reveal delay-400">
           <Link

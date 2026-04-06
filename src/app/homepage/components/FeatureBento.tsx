@@ -20,13 +20,13 @@ const features = [
     iconColor: 'text-teal',
     glowClass: 'icon-glow-teal',
     highlights: [
-      '5-level escalation system',
+      '3-level escalation system',
       'Smart timing (skips weekends & holidays)',
       'UPI, cards, netbanking via Razorpay',
       'Auto-generated receipts',
     ],
     accent: '#0D9488',
-    stat: { value: '+43%', label: 'avg. collection rate improvement' },
+    stat: { value: '3-Level', label: 'smart escalation system' },
   },
   {
     id: 'communication',
@@ -64,7 +64,7 @@ const features = [
       'Month-over-month comparisons',
     ],
     accent: '#F59E0B',
-    stat: { value: '3 days', label: 'average setup time' },
+    stat: { value: '<48 hrs', label: 'to go live with your data' },
   },
 ];
 
@@ -201,13 +201,13 @@ export default function FeatureBento() {
             <div className="relative z-10">
               <div className="inline-flex items-center gap-2 bg-white/15 rounded-full px-3 py-1.5 mb-5">
                 <span className="w-1.5 h-1.5 rounded-full bg-teal-light pulse-dot"></span>
-                <span className="text-xs font-600 text-white/90">Risk-Free Guarantee</span>
+                <span className="text-xs font-600 text-white/90">Fully Managed Service</span>
               </div>
               <h3 className="font-display text-2xl font-800 text-white leading-tight mb-3">
-                15% improvement in 3 months or full refund.
+                You focus on education. We handle the admin chaos.
               </h3>
               <p className="text-white/70 text-sm leading-relaxed">
-                We're so confident in our results that we back every deployment with a complete money-back guarantee.
+                Fee reminders, parent communication, attendance alerts — all automated through WhatsApp. Zero technical setup required.
               </p>
             </div>
             <div className="relative z-10 mt-8 flex flex-col sm:flex-row gap-3">

@@ -5,7 +5,7 @@ import HeroSection from './components/HeroSection';
 import StatsBar from './components/StatsBar';
 import FeatureBento from './components/FeatureBento';
 import HowItWorks from './components/HowItWorks';
-import TestimonialsSection from './components/TestimonialsSection';
+import EscalationSection from './components/EscalationSection';
 import PricingTeaser from './components/PricingTeaser';
 import ScrollRevealInit from './components/ScrollRevealInit';
 import ContactForm from '@/components/ContactForm';
@@ -19,7 +19,7 @@ export default function Homepage() {
         <StatsBar />
         <FeatureBento />
         <HowItWorks />
-        <TestimonialsSection />
+        <EscalationSection />
         <PricingTeaser />
         <ContactForm />
       </main>

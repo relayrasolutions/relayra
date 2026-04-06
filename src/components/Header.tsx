@@ -66,7 +66,7 @@ export default function Header() {
           <div className="hidden md:flex items-center gap-3">
             <Link
               href="/login"
-              className="px-4 py-2 text-sm font-medium text-text-secondary hover:text-primary transition-colors duration-200 rounded-btn hover:bg-primary/5"
+              className="px-5 py-2 text-sm font-semibold text-white bg-[#1E3A5F] hover:bg-[#162d4a] border border-white/20 rounded-lg transition-all duration-200"
             >
               Login
             </Link>
