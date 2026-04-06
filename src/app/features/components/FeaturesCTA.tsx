@@ -12,10 +12,10 @@ export default function FeaturesCTA() {
             <span className="text-xs font-700 uppercase tracking-wider">Get Started Today</span>
           </div>
           <h2 className="font-display text-3xl sm:text-4xl lg:text-5xl font-800 text-text-primary tracking-tight mb-6">
-            Ready to put your school's operations on autopilot?
+            Ready to put your school&apos;s operations on autopilot?
           </h2>
           <p className="text-text-secondary text-lg leading-relaxed max-w-2xl mx-auto mb-10">
-            Join 500+ Indian schools that have automated fee collection, parent communication, and daily operations with Relayra. Setup in 3 days, results in 90.
+            Start your 30-Day Free Trial and see how Relayra automates fee collection, parent communication, and daily operations. Setup in under 48 hours.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12">
@@ -26,7 +26,7 @@ export default function FeaturesCTA() {
               className="btn-orange inline-flex items-center gap-2.5 px-8 py-4 text-base font-display"
             >
               <Icon name="CalendarIcon" size={18} variant="outline" />
-              Book a Free Demo
+              Start Free Trial
             </a>
             <Link
               href="/pricing"
@@ -38,13 +38,13 @@ export default function FeaturesCTA() {
 
           <div className="flex flex-wrap items-center justify-center gap-6">
             {[
-              { icon: 'ShieldCheckIcon', text: '15% improvement guaranteed' },
-              { icon: 'ClockIcon', text: 'Setup in 3 working days' },
-              { icon: 'CurrencyRupeeIcon', text: 'Full refund if no improvement' },
+              { icon: 'CalendarDaysIcon', text: '30-Day Free Trial' },
+              { icon: 'ClockIcon', text: 'Setup in under 48 hours' },
+              { icon: 'CreditCardIcon', text: 'No credit card required' },
               { icon: 'PhoneIcon', text: 'Dedicated support included' },
             ].map((item) => (
               <div key={item.text} className="flex items-center gap-2 text-text-secondary text-sm">
-                <Icon name={item.icon as 'ShieldCheckIcon'} size={16} variant="outline" className="text-teal" />
+                <Icon name={item.icon as 'CalendarDaysIcon'} size={16} variant="outline" className="text-teal" />
                 {item.text}
               </div>
             ))}

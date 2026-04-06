@@ -14,7 +14,7 @@ const plans = [
     badge: null,
     features: [
       { text: 'Fee reminders + Razorpay payment links', included: true },
-      { text: '5-level escalation system', included: true },
+      { text: '3-level escalation system', included: true },
       { text: 'Auto-generated receipts via WhatsApp', included: true },
       { text: 'Attendance absence alerts', included: true },
       { text: 'Birthday & festive greetings', included: true },
@@ -274,8 +274,18 @@ export default function PricingCards() {
           );
         })()}
 
+        {/* Trial badge */}
+        <div className="mt-10 mb-6 text-center reveal delay-350">
+          <div className="inline-flex items-center gap-3 bg-teal/10 border border-teal/20 rounded-full px-6 py-3">
+            <svg className="w-5 h-5 text-teal flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span className="text-sm font-700 text-teal">All plans include a 30-Day Free Trial — no credit card required</span>
+          </div>
+        </div>
+
         {/* Included in all plans */}
-        <div className="mt-10 bg-white rounded-xl border border-border p-8 reveal delay-400">
+        <div className="bg-white rounded-xl border border-border p-8 reveal delay-400">
           <h3 className="font-display font-700 text-text-primary text-base mb-6 text-center">
             Included in every plan — no extra charges
           </h3>

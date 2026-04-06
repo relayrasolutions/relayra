@@ -16,7 +16,7 @@ export default function PricingCTA() {
             Not sure which plan is right for you?
           </h2>
           <p className="text-text-secondary text-base leading-relaxed max-w-xl mx-auto mb-8">
-            Book a free 20-minute demo. We'll understand your school's needs and recommend the best plan — no pressure, no commitment.
+            Book a free 20-minute demo. We&apos;ll understand your school&apos;s needs and recommend the best plan — no pressure, no commitment.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-10">
@@ -40,13 +40,13 @@ export default function PricingCTA() {
           {/* Trust row */}
           <div className="flex flex-wrap items-center justify-center gap-6 pt-6 border-t border-border">
             {[
-              { icon: 'ShieldCheckIcon', text: '15% improvement guaranteed' },
-              { icon: 'ClockIcon', text: 'Live in 3 working days' },
-              { icon: 'ArrowUturnLeftIcon', text: 'Full refund if not satisfied' },
-              { icon: 'UserGroupIcon', text: '500+ schools trust us' },
+              { icon: 'CalendarDaysIcon', text: '30-Day Free Trial' },
+              { icon: 'ClockIcon', text: 'Live in under 48 hours' },
+              { icon: 'CreditCardIcon', text: 'No credit card required' },
+              { icon: 'PhoneIcon', text: 'Dedicated support included' },
             ].map((item) => (
               <div key={item.text} className="flex items-center gap-2 text-text-secondary text-sm">
-                <Icon name={item.icon as 'ShieldCheckIcon'} size={15} variant="outline" className="text-teal" />
+                <Icon name={item.icon as 'CalendarDaysIcon'} size={15} variant="outline" className="text-teal" />
                 {item.text}
               </div>
             ))}

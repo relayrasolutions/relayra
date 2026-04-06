@@ -9,9 +9,14 @@ const faqs = [
       'No setup fee, no per-message charges, no hidden costs. The monthly plan price is all-inclusive — WhatsApp integration, Razorpay setup, template creation, and ongoing support are all included.',
   },
   {
+    question: 'How does the 30-day free trial work?',
+    answer:
+      'We set up Relayra with your real school data and you get full access to everything for 30 days — automated fee reminders, parent communication, attendance tracking, daily reports. No payment required during the trial. If you\'re happy with the results, you pick a plan and continue. If not, you walk away with zero obligation.',
+  },
+  {
     question: 'How long does it take to get started?',
     answer:
-      'Typically 3 working days from when you share your student data. Our team handles the entire configuration — WhatsApp Business API setup, fee schedules, escalation rules, and testing. You just share a spreadsheet.',
+      'Typically under 48 hours from when you share your student data. Our team handles the entire configuration — WhatsApp Business API setup, fee schedules, escalation rules, and testing. You just share a spreadsheet.',
   },
   {
     question: 'What happens if parents don\'t have WhatsApp?',
@@ -22,11 +27,6 @@ const faqs = [
     question: 'Can I switch plans later?',
     answer:
       'Yes, you can upgrade or downgrade at any time. Upgrades take effect immediately (prorated billing). Downgrades take effect at the next billing cycle.',
-  },
-  {
-    question: 'How does the 15% guarantee work exactly?',
-    answer:
-      'We measure your fee collection rate in the 30 days before going live with Relayra (your baseline). After 90 days, if the collection rate hasn\'t improved by at least 15 percentage points, we issue a full refund of all subscription fees paid. We track this transparently through the analytics dashboard.',
   },
   {
     question: 'Is student and parent data secure?',
@@ -46,7 +46,11 @@ const faqs = [
 ];
 
 export default function PricingFAQ() {
-  const [openIndex, setOpenIndex] = useState<number | null>(0);
+  const [openIndex, setOpenIndex] = useState<number | null>(1);
+
+  const toggleFaq = (index: number) => {
+    setOpenIndex(openIndex === index ? null : index);
+  };
 
   return (
     <section className="py-20 bg-bg-base" aria-label="Frequently asked questions">
@@ -62,49 +66,59 @@ export default function PricingFAQ() {
         </div>
 
         <div className="space-y-3">
-          {faqs?.map((faq, index) => (
-            <div
-              key={index}
-              className={`bg-white rounded-xl border transition-all duration-300 reveal ${index > 0 ? `delay-${Math.min(index * 50, 400)}` : ''} ${
-                openIndex === index ? 'border-teal/30 shadow-card' : 'border-border'
-              }`}
-            >
-              <button
-                onClick={() => setOpenIndex(openIndex === index ? null : index)}
-                className="w-full flex items-center justify-between gap-4 px-6 py-5 text-left"
-                aria-expanded={openIndex === index}
+          {faqs.map((faq, index) => {
+            const isOpen = openIndex === index;
+            return (
+              <div
+                key={index}
+                className={`bg-white rounded-xl border transition-all duration-300 reveal ${index > 0 ? `delay-${Math.min(index * 50, 400)}` : ''} ${
+                  isOpen ? 'border-teal/30 shadow-card' : 'border-border'
+                }`}
               >
-                <span className="font-display font-700 text-text-primary text-sm leading-snug">
-                  {faq?.question}
-                </span>
-                <span
-                  className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-all duration-300 ${
-                    openIndex === index ? 'bg-teal text-white' : 'bg-bg-base text-text-secondary'
+                <button
+                  onClick={() => toggleFaq(index)}
+                  className="w-full flex items-center justify-between gap-4 px-6 py-5 text-left"
+                  aria-expanded={isOpen}
+                >
+                  <span className="font-display font-700 text-text-primary text-sm leading-snug">
+                    {faq.question}
+                  </span>
+                  <span
+                    className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-all duration-300 ${
+                      isOpen ? 'bg-teal text-white rotate-180' : 'bg-bg-base text-text-secondary'
+                    }`}
+                  >
+                    <svg
+                      className="w-3.5 h-3.5 transition-transform duration-300"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </span>
+                </button>
+
+                <div
+                  className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                    isOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
                   }`}
                 >
-                  <Icon
-                    name={openIndex === index ? 'MinusIcon' : 'PlusIcon'}
-                    size={14}
-                    variant="outline"
-                  />
-                </span>
-              </button>
-
-              {openIndex === index && (
-                <div className="px-6 pb-5">
-                  <div className="w-full h-px bg-border mb-4" />
-                  <p className="text-text-secondary text-sm leading-relaxed">
-                    {faq?.answer}
-                  </p>
+                  <div className="px-6 pb-5">
+                    <div className="w-full h-px bg-border mb-4" />
+                    <p className="text-text-secondary text-sm leading-relaxed">
+                      {faq.answer}
+                    </p>
+                  </div>
                 </div>
-              )}
-            </div>
-          ))}
+              </div>
+            );
+          })}
         </div>
 
         <div className="text-center mt-10 reveal delay-300">
           <p className="text-text-secondary text-sm mb-3">
-            Still have questions? We're happy to help.
+            Still have questions? We&apos;re happy to help.
           </p>
           <a
             href="https://wa.me/91XXXXXXXXXX?text=Hi%2C+I+have+a+question+about+Relayra+pricing"
