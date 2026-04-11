@@ -112,30 +112,6 @@ export default function HeroSection() {
           </div>
         </div>
 
-        {/* Floating Stats Card */}
-        <div className="absolute bottom-12 right-4 sm:right-8 lg:right-12 hidden lg:block">
-          <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-5 w-64 shadow-2xl">
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-xs font-700 text-white/60 uppercase tracking-wider">Today's Collections</p>
-              <span className="w-2 h-2 rounded-full bg-success pulse-dot"></span>
-            </div>
-            <div className="text-2xl font-display font-800 text-white mb-1">Rs. 84,500</div>
-            <div className="flex items-center gap-1.5 text-teal-light text-xs font-600">
-              <Icon name="ArrowTrendingUpIcon" size={14} variant="outline" />
-              +23% vs last month
-            </div>
-            <div className="mt-4 h-1.5 bg-white/10 rounded-full overflow-hidden">
-              <div
-                className="h-full rounded-full"
-                style={{ width: '72%', background: 'linear-gradient(90deg, #0D9488, #14B8A6)' }} />
-              
-            </div>
-            <div className="flex justify-between text-[10px] text-white/40 mt-1.5">
-              <span>72% collected</span>
-              <span>28% pending</span>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Bottom fade */}

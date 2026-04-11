@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase, formatCurrency, timeAgo } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import AppLayout from '@/components/AppLayout';
@@ -30,7 +31,8 @@ const PLAN_PRICES: Record<string, number> = {
 };
 
 export default function AdminPage() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
   const [schools, setSchools] = useState<School[]>([]);
   const [stats, setStats] = useState<PlatformStats | null>(null);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
@@ -179,7 +181,15 @@ export default function AdminPage() {
     }
   };
 
-  if (user?.role !== 'super_admin') {
+  useEffect(() => {
+    if (!authLoading && !user) router.replace('/login');
+  }, [authLoading, user, router]);
+
+  if (authLoading || !user) {
+    return <AppLayout><div className="text-center py-12"><p className="text-[#64748B]">Loading...</p></div></AppLayout>;
+  }
+
+  if (user.role !== 'super_admin') {
     return <AppLayout><div className="text-center py-12"><p className="text-[#64748B]">Access denied. Super admin only.</p></div></AppLayout>;
   }
 

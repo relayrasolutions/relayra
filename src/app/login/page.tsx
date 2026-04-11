@@ -155,12 +155,9 @@ export default function LoginPage() {
           <p className="text-[#64748B] text-sm mt-1">School Operations Dashboard</p>
         </div>
 
-        {/* Demo Credentials */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-6 text-xs text-blue-700">
-          <p className="font-semibold mb-1">Demo Credentials:</p>
-          <p>Super Admin: admin@relayrasolutions.com / Relayra@2026</p>
-          <p>School Admin: admin@dps-moradabad.com / Demo@1234</p>
-          <p>Teacher: teacher.7a@dps-moradabad.com / Teacher@1234</p>
+        {/* Account access info */}
+        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-6 text-xs text-slate-600">
+          <p>School administrators: Use the credentials provided by your Relayra account manager.</p>
         </div>
 
         {/* Loading overlay */}
