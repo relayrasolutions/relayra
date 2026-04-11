@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase, formatPhone, timeAgo } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import toast from 'react-hot-toast';
@@ -26,7 +27,8 @@ const STATUS_OPTIONS = [
 type TabType = 'attendance' | 'students' | 'messages';
 
 export default function TeacherPage() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, loading: authLoading } = useAuth();
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>('attendance');
   const [students, setStudents] = useState<Student[]>([]);
   const [attendance, setAttendance] = useState<Record<string, string>>({});
@@ -109,6 +111,10 @@ export default function TeacherPage() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  useEffect(() => {
+    if (!authLoading && !user) router.replace('/login');
+  }, [authLoading, user, router]);
+
   const markStatus = async (studentId: string, status: string) => {
     setSaving(studentId);
     try {
@@ -147,7 +153,9 @@ export default function TeacherPage() {
     unmarked: students.filter(s => !attendance[s.id]).length,
   };
 
-  if (!user) return null;
+  if (authLoading || !user) {
+    return <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]"><p className="text-[#64748B]">Loading...</p></div>;
+  }
 
   const tabs: { key: TabType; label: string; icon: string }[] = [
     { key: 'attendance', label: 'Attendance', icon: '📋' },

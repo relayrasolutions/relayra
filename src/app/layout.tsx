@@ -9,8 +9,8 @@ import { Toaster } from "react-hot-toast";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Relayra Solutions - School Operations Dashboard",
-  description: "Complete school operations management platform",
+  title: "Relayra Solutions — Managed WhatsApp Automation for Schools",
+  description: "Automate fee collection, parent communication, and attendance tracking via WhatsApp. Managed service for Indian private schools.",
 };
 
 export default function RootLayout({

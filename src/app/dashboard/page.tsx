@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { supabase, formatCurrency, timeAgo } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import AppLayout from '@/components/AppLayout';
@@ -42,7 +43,8 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
 };
 
 export default function DashboardPage() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [feeChartData, setFeeChartData] = useState<any[]>([]);
@@ -153,10 +155,22 @@ export default function DashboardPage() {
   }, [user?.schoolId]);
 
   useEffect(() => {
+    if (!authLoading && !user) router.replace('/login');
+  }, [authLoading, user, router]);
+
+  useEffect(() => {
     fetchDashboard();
     const interval = setInterval(fetchDashboard, 60000);
     return () => clearInterval(interval);
   }, [fetchDashboard]);
+
+  if (authLoading || !user) {
+    return (
+      <AppLayout>
+        <div className="text-center py-12"><p className="text-[#64748B]">Loading...</p></div>
+      </AppLayout>
+    );
+  }
 
   const sendEmergency = async () => {
     if (!emergencyMsg.trim() || !user?.schoolId) return;
