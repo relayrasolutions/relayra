@@ -20,7 +20,8 @@
     "react": "19.0.3",
     "react-dom": "19.0.3",
     "react-hot-toast": "^2.4.1",
-    "recharts": "^2.15.2"
+    "recharts": "^2.15.2",
+    "resend": "^6.10.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
