@@ -41,20 +41,11 @@ export default function TeacherPage() {
   const today = new Date().toISOString().split('T')[0];
   const todayDisplay = new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
-  const [fetchError, setFetchError] = useState(false);
-
   const loadData = useCallback(async () => {
     if (!user?.schoolId) return;
     setLoading(true);
     setLoaded(false);
-    setFetchError(false);
-
-    const timeout = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('timeout')), 10000)
-    );
-
     try {
-      await Promise.race([timeout, (async () => {
       const { data: userData } = await supabase
         .from('users')
         .select('assigned_class, assigned_section')
@@ -111,21 +102,12 @@ export default function TeacherPage() {
       })));
 
       setLoaded(true);
-      })()]);
     } catch (err: any) {
-      console.error('Teacher fetch error:', err);
-      const isAuthError = err?.message?.includes('JWT') || err?.message?.includes('token') ||
-        err?.code === 'PGRST301' || err?.status === 401 || err?.status === 403;
-      if (isAuthError) {
-        toast.error('Session expired, please login again');
-        router.replace('/login');
-        return;
-      }
-      setFetchError(true);
+      toast.error(err.message || 'Failed to load');
     } finally {
       setLoading(false);
     }
-  }, [user?.schoolId, user?.id, today, router]);
+  }, [user?.schoolId, user?.id, today]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -173,25 +155,6 @@ export default function TeacherPage() {
 
   if (authLoading || !user) {
     return <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]"><p className="text-[#64748B]">Loading...</p></div>;
-  }
-
-  if (fetchError) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]">
-        <div className="flex flex-col items-center text-center px-4">
-          <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center mb-4">
-            <svg className="w-7 h-7 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
-          <h3 className="text-lg font-semibold text-[#1E3A5F] mb-2">Failed to load data</h3>
-          <p className="text-sm text-[#64748B] mb-6">Data could not be loaded. This may be a temporary issue.</p>
-          <button onClick={() => loadData()} className="px-5 py-2.5 bg-[#0D9488] text-white text-sm font-semibold rounded-lg hover:bg-[#0f766e] transition-colors">
-            Retry
-          </button>
-        </div>
-      </div>
-    );
   }
 
   const tabs: { key: TabType; label: string; icon: string }[] = [
