@@ -55,11 +55,20 @@ export default function DashboardPage() {
   const [emergencyOpen, setEmergencyOpen] = useState(false);
   const [emergencyMsg, setEmergencyMsg] = useState('');
   const [emergencySending, setEmergencySending] = useState(false);
+  const [fetchError, setFetchError] = useState(false);
 
   const fetchDashboard = useCallback(async () => {
     if (!user?.schoolId) return;
     setLoading(true);
+    setFetchError(false);
+
+    // 10-second timeout
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('timeout')), 10000)
+    );
+
     try {
+      await Promise.race([timeout, (async () => {
       const today = new Date().toISOString().split('T')[0];
       const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
 
@@ -147,12 +156,22 @@ export default function DashboardPage() {
         attChart.push({ day: dayName, pct: total > 0 ? Math.round((present / total) * 100) : 0 });
       }
       setAttendanceChartData(attChart);
-    } catch (err) {
-      console.error(err);
+      })()]);
+    } catch (err: any) {
+      console.error('Dashboard fetch error:', err);
+      // Check if it's an auth error
+      const isAuthError = err?.message?.includes('JWT') || err?.message?.includes('token') ||
+        err?.code === 'PGRST301' || err?.status === 401 || err?.status === 403;
+      if (isAuthError) {
+        toast.error('Session expired, please login again');
+        router.replace('/login');
+        return;
+      }
+      setFetchError(true);
     } finally {
       setLoading(false);
     }
-  }, [user?.schoolId]);
+  }, [user?.schoolId, router]);
 
   useEffect(() => {
     if (!authLoading && !user) router.replace('/login');
@@ -241,6 +260,25 @@ export default function DashboardPage() {
     if (diff === 1) return 'Tomorrow';
     return `In ${diff} days`;
   };
+
+  if (fetchError) {
+    return (
+      <AppLayout>
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center mb-4">
+            <svg className="w-7 h-7 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-semibold text-[#1E3A5F] mb-2">Failed to load dashboard</h3>
+          <p className="text-sm text-[#64748B] mb-6 max-w-sm">Data could not be loaded. This may be a temporary issue.</p>
+          <button onClick={() => fetchDashboard()} className="px-5 py-2.5 bg-[#0D9488] text-white text-sm font-semibold rounded-lg hover:bg-[#0f766e] transition-colors">
+            Retry
+          </button>
+        </div>
+      </AppLayout>
+    );
+  }
 
   if (loading) {
     return (
