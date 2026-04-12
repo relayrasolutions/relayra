@@ -47,6 +47,7 @@ export default function AdminPage() {
     adminName: '', adminEmail: '', adminPassword: '',
   });
   const [adding, setAdding] = useState(false);
+  const [loadingStale, setLoadingStale] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (user?.role !== 'super_admin') return;
@@ -140,6 +141,28 @@ export default function AdminPage() {
   }, [user?.role]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Re-fetch data when tab becomes visible again (handles idle/sleep)
+  useEffect(() => {
+    const handleVisibility = async () => {
+      if (document.visibilityState !== 'visible') return;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        fetchData();
+      } else {
+        router.replace('/login');
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [fetchData, router]);
+
+  // Skeleton timeout — if loading takes >15s, show stale state
+  useEffect(() => {
+    if (!loading) { setLoadingStale(false); return; }
+    const timer = setTimeout(() => setLoadingStale(true), 15000);
+    return () => clearTimeout(timer);
+  }, [loading]);
 
   const handleAddSchool = async () => {
     if (!addForm.name || !addForm.adminEmail || !addForm.adminName || !addForm.adminPassword) {
@@ -240,7 +263,14 @@ export default function AdminPage() {
         </div>
 
         {loading ? (
-          <div className="flex justify-center py-12"><svg className="animate-spin w-6 h-6 text-[#0D9488]" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg></div>
+          loadingStale ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <p className="text-[#64748B] mb-4">Data is taking longer than expected to load.</p>
+              <button onClick={() => window.location.reload()} className="px-5 py-2.5 bg-[#0D9488] text-white text-sm font-semibold rounded-lg hover:bg-[#0f766e] transition-colors">Reload</button>
+            </div>
+          ) : (
+            <div className="flex justify-center py-12"><svg className="animate-spin w-6 h-6 text-[#0D9488]" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg></div>
+          )
         ) : (
           <>
             {/* Platform Stats */}

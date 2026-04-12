@@ -55,6 +55,7 @@ export default function DashboardPage() {
   const [emergencyOpen, setEmergencyOpen] = useState(false);
   const [emergencyMsg, setEmergencyMsg] = useState('');
   const [emergencySending, setEmergencySending] = useState(false);
+  const [loadingStale, setLoadingStale] = useState(false);
 
   const fetchDashboard = useCallback(async () => {
     if (!user?.schoolId) return;
@@ -164,6 +165,28 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [fetchDashboard]);
 
+  // Re-fetch data when tab becomes visible again (handles idle/sleep)
+  useEffect(() => {
+    const handleVisibility = async () => {
+      if (document.visibilityState !== 'visible') return;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        fetchDashboard();
+      } else {
+        router.replace('/login');
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [fetchDashboard, router]);
+
+  // Skeleton timeout — if loading takes >15s, show stale state
+  useEffect(() => {
+    if (!loading) { setLoadingStale(false); return; }
+    const timer = setTimeout(() => setLoadingStale(true), 15000);
+    return () => clearTimeout(timer);
+  }, [loading]);
+
   if (authLoading || !user) {
     return (
       <AppLayout>
@@ -243,6 +266,18 @@ export default function DashboardPage() {
   };
 
   if (loading) {
+    if (loadingStale) {
+      return (
+        <AppLayout>
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <p className="text-[#64748B] mb-4">Dashboard is taking longer than expected to load.</p>
+            <button onClick={() => window.location.reload()} className="px-5 py-2.5 bg-[#0D9488] text-white text-sm font-semibold rounded-lg hover:bg-[#0f766e] transition-colors">
+              Reload
+            </button>
+          </div>
+        </AppLayout>
+      );
+    }
     return (
       <AppLayout>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">

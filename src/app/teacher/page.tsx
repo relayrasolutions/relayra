@@ -36,6 +36,7 @@ export default function TeacherPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [loadingStale, setLoadingStale] = useState(false);
   const [assignedClass, setAssignedClass] = useState('');
   const [assignedSection, setAssignedSection] = useState('');
   const today = new Date().toISOString().split('T')[0];
@@ -114,6 +115,28 @@ export default function TeacherPage() {
   useEffect(() => {
     if (!authLoading && !user) router.replace('/login');
   }, [authLoading, user, router]);
+
+  // Re-fetch data when tab becomes visible again (handles idle/sleep)
+  useEffect(() => {
+    const handleVisibility = async () => {
+      if (document.visibilityState !== 'visible') return;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        loadData();
+      } else {
+        router.replace('/login');
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [loadData, router]);
+
+  // Skeleton timeout — if loading takes >15s, show stale state
+  useEffect(() => {
+    if (!loading) { setLoadingStale(false); return; }
+    const timer = setTimeout(() => setLoadingStale(true), 15000);
+    return () => clearTimeout(timer);
+  }, [loading]);
 
   const markStatus = async (studentId: string, status: string) => {
     setSaving(studentId);
@@ -247,16 +270,23 @@ export default function TeacherPage() {
 
             {/* Loading */}
             {loading && (
-              <div className="space-y-3">
-                {[1, 2, 3, 4, 5].map(i => (
-                  <div key={i} className="bg-white rounded-xl border border-[#E2E8F0] p-4 animate-pulse">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-gray-200 rounded-full" />
-                      <div className="flex-1"><div className="h-4 bg-gray-200 rounded w-32 mb-2" /><div className="h-3 bg-gray-100 rounded w-20" /></div>
+              loadingStale ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <p className="text-[#64748B] mb-4">Data is taking longer than expected to load.</p>
+                  <button onClick={() => window.location.reload()} className="px-5 py-2.5 bg-[#0D9488] text-white text-sm font-semibold rounded-lg hover:bg-[#0f766e] transition-colors">Reload</button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {[1, 2, 3, 4, 5].map(i => (
+                    <div key={i} className="bg-white rounded-xl border border-[#E2E8F0] p-4 animate-pulse">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-gray-200 rounded-full" />
+                        <div className="flex-1"><div className="h-4 bg-gray-200 rounded w-32 mb-2" /><div className="h-3 bg-gray-100 rounded w-20" /></div>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )
             )}
 
             {/* No class assigned */}
