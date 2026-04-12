@@ -47,11 +47,19 @@ export default function AdminPage() {
     adminName: '', adminEmail: '', adminPassword: '',
   });
   const [adding, setAdding] = useState(false);
+  const [fetchError, setFetchError] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (user?.role !== 'super_admin') return;
     setLoading(true);
+    setFetchError(false);
+
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('timeout')), 10000)
+    );
+
     try {
+      await Promise.race([timeout, (async () => {
       const [schoolsRes, studentsRes, feesRes, messagesRes, usersRes] = await Promise.all([
         supabase.from('schools').select('*').order('created_at', { ascending: false }),
         supabase.from('students').select('id, school_id, status'),
@@ -134,10 +142,21 @@ export default function AdminPage() {
         }
       });
       setAlerts(alertList.slice(0, 10));
+      })()]);
+    } catch (err: any) {
+      console.error('Admin fetch error:', err);
+      const isAuthError = err?.message?.includes('JWT') || err?.message?.includes('token') ||
+        err?.code === 'PGRST301' || err?.status === 401 || err?.status === 403;
+      if (isAuthError) {
+        toast.error('Session expired, please login again');
+        router.replace('/login');
+        return;
+      }
+      setFetchError(true);
     } finally {
       setLoading(false);
     }
-  }, [user?.role]);
+  }, [user?.role, router]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -187,6 +206,25 @@ export default function AdminPage() {
 
   if (authLoading || !user) {
     return <AppLayout><div className="text-center py-12"><p className="text-[#64748B]">Loading...</p></div></AppLayout>;
+  }
+
+  if (fetchError) {
+    return (
+      <AppLayout>
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center mb-4">
+            <svg className="w-7 h-7 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-semibold text-[#1E3A5F] mb-2">Failed to load data</h3>
+          <p className="text-sm text-[#64748B] mb-6 max-w-sm">Data could not be loaded. This may be a temporary issue.</p>
+          <button onClick={() => fetchData()} className="px-5 py-2.5 bg-[#0D9488] text-white text-sm font-semibold rounded-lg hover:bg-[#0f766e] transition-colors">
+            Retry
+          </button>
+        </div>
+      </AppLayout>
+    );
   }
 
   if (user.role !== 'super_admin') {
