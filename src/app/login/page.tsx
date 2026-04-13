@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -13,8 +13,17 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('Signing in...');
   const [forgotLoading, setForgotLoading] = useState(false);
-  const { signIn } = useAuth();
+  const { signIn, user: authUser, loading: authLoading } = useAuth();
   const router = useRouter();
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (!authLoading && authUser) {
+      if (authUser.role === 'super_admin') router.push('/admin');
+      else if (authUser.role === 'school_staff') router.push('/teacher');
+      else router.push('/dashboard');
+    }
+  }, [authLoading, authUser, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

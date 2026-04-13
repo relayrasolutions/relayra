@@ -33,8 +33,8 @@ export default function RootPage() {
     }
   }, [user, loading, router]);
 
-  // If logged in, show loading while redirecting
-  if (loading || redirecting) {
+  // Only show redirect screen once we KNOW user is logged in (never block on auth loading)
+  if (redirecting) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]">
         <div className="flex flex-col items-center gap-3">
