@@ -3,15 +3,15 @@
 import React from 'react';
 
 const features = [
-  { label: 'Fee reminders', erp: 'Manual', gateway: 'No reminders', relayra: '3-level automated escalation' },
-  { label: 'WhatsApp delivery', erp: 'No', gateway: 'No', relayra: '95%+ open rates' },
-  { label: 'Attendance alerts to parents', erp: 'Most don\u2019t have', gateway: 'No', relayra: 'Instant WhatsApp alerts' },
-  { label: 'Setup effort from school', erp: 'High \u2014 weeks of training', gateway: 'Medium \u2014 tech setup', relayra: 'Zero \u2014 we do everything' },
-  { label: 'Ongoing management', erp: 'School manages itself', gateway: 'School manages itself', relayra: 'Fully managed by us' },
-  { label: 'Parent communication', erp: 'One-way notices', gateway: 'No', relayra: 'Two-way WhatsApp' },
-  { label: 'Birthday / Festival wishes', erp: 'No', gateway: 'No', relayra: 'Automated, religion-aware' },
-  { label: 'Daily admin reports', erp: 'Manual', gateway: 'No', relayra: 'Auto-generated "Principal\u2019s Pulse"' },
-  { label: 'Cost', erp: '\u20B950K\u20132L/year', gateway: 'Transaction fees only', relayra: 'From \u20B93,999/month' },
+  { label: 'Fee reminders', erp: 'Manual', relayra: '3-level automated escalation' },
+  { label: 'WhatsApp delivery', erp: 'No', relayra: '95%+ open rates' },
+  { label: 'Attendance alerts to parents', erp: 'Most don\u2019t have', relayra: 'Instant WhatsApp alerts' },
+  { label: 'Setup effort from school', erp: 'High \u2014 weeks of training', relayra: 'Zero \u2014 we do everything' },
+  { label: 'Ongoing management', erp: 'School manages itself', relayra: 'Fully managed by us' },
+  { label: 'Parent communication', erp: 'One-way notices', relayra: 'Two-way WhatsApp' },
+  { label: 'Birthday / Festival wishes', erp: 'No', relayra: 'Automated' },
+  { label: 'Daily admin reports', erp: 'Manual', relayra: 'Auto-generated "Principal\u2019s Pulse"' },
+  { label: 'Cost', erp: '\u20B950K\u20132L/year', relayra: 'From \u20B93,999/month' },
 ];
 
 function Badge({ works }: { works: boolean }) {
@@ -63,10 +63,9 @@ export default function RelayraVsOthers() {
             <table className="w-full">
               <thead>
                 <tr className="bg-[#F1F5F9]">
-                  <th className="text-left px-6 py-4 text-sm font-700 text-[#1E3A5F] w-[22%]">Feature</th>
-                  <th className="text-left px-6 py-4 text-sm font-700 text-[#64748B] w-[24%]">Typical School ERP</th>
-                  <th className="text-left px-6 py-4 text-sm font-700 text-[#64748B] w-[24%]">Payment Gateways</th>
-                  <th className="text-left px-6 py-4 text-sm font-700 text-[#0D9488] w-[30%]">
+                  <th className="text-left px-6 py-4 text-sm font-700 text-[#1E3A5F] w-[30%]">Feature</th>
+                  <th className="text-left px-6 py-4 text-sm font-700 text-[#64748B] w-[35%]">Typical School ERP</th>
+                  <th className="text-left px-6 py-4 text-sm font-700 text-[#0D9488] w-[35%]">
                     Relayra
                   </th>
                 </tr>
@@ -76,7 +75,6 @@ export default function RelayraVsOthers() {
                   <tr key={f.label} className={`border-t border-[#E2E8F0] ${i % 2 === 0 ? '' : 'bg-[#FAFBFC]'}`}>
                     <td className="px-6 py-4 text-sm font-600 text-[#1E293B]">{f.label}</td>
                     <td className="px-6 py-4"><CellContent text={f.erp} isRelayra={false} /></td>
-                    <td className="px-6 py-4"><CellContent text={f.gateway} isRelayra={false} /></td>
                     <td className="px-6 py-4 bg-teal-50/40"><CellContent text={f.relayra} isRelayra /></td>
                   </tr>
                 ))}
@@ -95,10 +93,6 @@ export default function RelayraVsOthers() {
                   <span className="text-xs text-[#94A3B8] w-20 shrink-0">ERP</span>
                   <CellContent text={f.erp} isRelayra={false} />
                 </div>
-                <div className="flex items-start justify-between gap-2">
-                  <span className="text-xs text-[#94A3B8] w-20 shrink-0">Gateway</span>
-                  <CellContent text={f.gateway} isRelayra={false} />
-                </div>
                 <div className="flex items-start justify-between gap-2 bg-teal-50/50 -mx-2 px-2 py-1 rounded">
                   <span className="text-xs text-[#0D9488] w-20 shrink-0 font-600">Relayra</span>
                   <CellContent text={f.relayra} isRelayra />
@@ -106,18 +100,6 @@ export default function RelayraVsOthers() {
               </div>
             </div>
           ))}
-        </div>
-
-        {/* Callout */}
-        <div className="mt-10 reveal delay-200">
-          <div className="bg-[#1E3A5F] rounded-2xl p-8 text-center">
-            <p className="text-white text-base sm:text-lg leading-relaxed max-w-2xl mx-auto">
-              Razorpay gives you a payment link. But who reminds the parent to click it?
-              Who follows up when they don&apos;t? Who escalates to the father when the
-              mother ignores it?{' '}
-              <span className="text-[#5EEAD4] font-700">That&apos;s what Relayra does.</span>
-            </p>
-          </div>
         </div>
       </div>
     </section>

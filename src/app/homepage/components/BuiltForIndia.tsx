@@ -10,11 +10,6 @@ const features = [
     body: 'Parents don\u2019t need to type anything. They get a simple WhatsApp menu \u2014 tap to check fee status, view attendance, download report card, or contact the school. No confusion, no training needed.',
   },
   {
-    icon: 'HeartIcon',
-    title: 'Religion-Aware Greetings',
-    body: 'Send Eid wishes to Muslim families, Diwali wishes to Hindu families, Christmas to Christian families \u2014 automatically. National holidays go to everyone. No manual sorting, no mix-ups.',
-  },
-  {
     icon: 'ArrowPathIcon',
     title: 'Works With Your Existing System',
     body: 'Using Tally? Excel sheets? An old ERP? We layer on top of whatever you have. No migration, no disruption, no learning curve. Your existing workflow stays untouched.',
@@ -32,7 +27,7 @@ const features = [
   {
     icon: 'NewspaperIcon',
     title: 'Daily Principal\u2019s Pulse Report',
-    body: 'Every morning, the principal gets a WhatsApp summary: attendance %, fee collection status, pending actions, upcoming events. No logging into dashboards \u2014 the dashboard comes to you.',
+    body: 'Every evening, the principal gets a WhatsApp summary of the full day\u2019s data: attendance %, fee collection status, pending actions, upcoming events. No logging into dashboards \u2014 the dashboard comes to you.',
   },
 ];
 
