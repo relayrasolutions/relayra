@@ -56,10 +56,15 @@ export default function DashboardPage() {
   const [emergencyMsg, setEmergencyMsg] = useState('');
   const [emergencySending, setEmergencySending] = useState(false);
   const [loadingStale, setLoadingStale] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchDashboard = useCallback(async () => {
-    if (!user?.schoolId) return;
+    if (!user?.schoolId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
+    setError(null);
     try {
       const today = new Date().toISOString().split('T')[0];
       const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
@@ -135,21 +140,32 @@ export default function DashboardPage() {
         }));
       setClassWiseData(classData);
 
-      // Attendance chart - last 14 days
+      // Attendance chart - last 14 days (single query instead of 14 sequential)
+      const fourteenDaysAgo = new Date();
+      fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 13);
+      const startDateStr = fourteenDaysAgo.toISOString().split('T')[0];
+      const { data: allAttData } = await supabase.from('attendance').select('date, status').eq('school_id', user.schoolId).gte('date', startDateStr).lte('date', today);
+
+      const attByDate: Record<string, { total: number; present: number }> = {};
+      (allAttData || []).forEach(a => {
+        if (!attByDate[a.date]) attByDate[a.date] = { total: 0, present: 0 };
+        attByDate[a.date].total++;
+        if (a.status === 'present') attByDate[a.date].present++;
+      });
+
       const attChart = [];
       for (let i = 13; i >= 0; i--) {
         const d = new Date();
         d.setDate(d.getDate() - i);
         const dateStr = d.toISOString().split('T')[0];
         const dayName = d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric' });
-        const { data: dayAtt } = await supabase.from('attendance').select('status').eq('school_id', user.schoolId).eq('date', dateStr);
-        const total = (dayAtt || []).length;
-        const present = (dayAtt || []).filter(a => a.status === 'present').length;
-        attChart.push({ day: dayName, pct: total > 0 ? Math.round((present / total) * 100) : 0 });
+        const dayData = attByDate[dateStr] || { total: 0, present: 0 };
+        attChart.push({ day: dayName, pct: dayData.total > 0 ? Math.round((dayData.present / dayData.total) * 100) : 0 });
       }
       setAttendanceChartData(attChart);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      console.error('Failed to load dashboard:', err);
+      setError(err.message || 'Failed to load dashboard data. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -264,6 +280,21 @@ export default function DashboardPage() {
     if (diff === 1) return 'Tomorrow';
     return `In ${diff} days`;
   };
+
+  if (error) {
+    return (
+      <AppLayout>
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <div className="text-4xl mb-3">⚠️</div>
+          <p className="text-[#1E293B] font-semibold mb-2">Failed to load dashboard</p>
+          <p className="text-[#64748B] text-sm mb-4">{error}</p>
+          <button onClick={() => { setError(null); fetchDashboard(); }} className="px-5 py-2.5 bg-[#0D9488] text-white text-sm font-semibold rounded-lg hover:bg-[#0f766e] transition-colors">
+            Retry
+          </button>
+        </div>
+      </AppLayout>
+    );
+  }
 
   if (loading) {
     if (loadingStale) {

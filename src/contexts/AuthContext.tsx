@@ -91,12 +91,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session: s } }) => {
+    // Safety timeout: if auth check takes >5s, force unblock the app
+    const timeout = setTimeout(() => {
+      setLoading(false);
+    }, 5000);
+
+    supabase.auth.getSession().then(async ({ data: { session: s }, error }) => {
+      clearTimeout(timeout);
+      if (error) {
+        // Session is stale/invalid — clear it silently
+        try { await supabase.auth.signOut(); } catch {}
+        setSession(null);
+        setUser(null);
+        setLoading(false);
+        return;
+      }
       setSession(s);
       if (s?.user) {
         const appUser = await fetchAppUser(s.user.id, s.user.email);
         setUser(appUser);
       }
+      setLoading(false);
+    }).catch(() => {
+      clearTimeout(timeout);
+      // Network error or timeout — don't block the app
+      setSession(null);
+      setUser(null);
       setLoading(false);
     });
 
@@ -114,7 +134,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      clearTimeout(timeout);
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signIn = async (email: string, password: string): Promise<{ error: string | null }> => {

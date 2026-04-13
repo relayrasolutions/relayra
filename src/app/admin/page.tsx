@@ -37,6 +37,7 @@ export default function AdminPage() {
   const [stats, setStats] = useState<PlatformStats | null>(null);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterTier, setFilterTier] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
@@ -50,8 +51,12 @@ export default function AdminPage() {
   const [loadingStale, setLoadingStale] = useState(false);
 
   const fetchData = useCallback(async () => {
-    if (user?.role !== 'super_admin') return;
+    if (user?.role !== 'super_admin') {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
+    setError(null);
     try {
       const [schoolsRes, studentsRes, feesRes, messagesRes, usersRes] = await Promise.all([
         supabase.from('schools').select('*').order('created_at', { ascending: false }),
@@ -135,6 +140,9 @@ export default function AdminPage() {
         }
       });
       setAlerts(alertList.slice(0, 10));
+    } catch (err: any) {
+      console.error('Failed to load admin data:', err);
+      setError(err.message || 'Failed to load data. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -262,7 +270,14 @@ export default function AdminPage() {
           </button>
         </div>
 
-        {loading ? (
+        {error ? (
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <div className="text-4xl mb-3">⚠️</div>
+            <p className="text-[#1E293B] font-semibold mb-2">Failed to load data</p>
+            <p className="text-[#64748B] text-sm mb-4">{error}</p>
+            <button onClick={() => { setError(null); fetchData(); }} className="px-5 py-2.5 bg-[#0D9488] text-white text-sm font-semibold rounded-lg hover:bg-[#0f766e] transition-colors">Retry</button>
+          </div>
+        ) : loading ? (
           loadingStale ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <p className="text-[#64748B] mb-4">Data is taking longer than expected to load.</p>

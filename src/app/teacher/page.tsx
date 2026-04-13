@@ -37,6 +37,7 @@ export default function TeacherPage() {
   const [saving, setSaving] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [loadingStale, setLoadingStale] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [assignedClass, setAssignedClass] = useState('');
   const [assignedSection, setAssignedSection] = useState('');
   const today = new Date().toISOString().split('T')[0];
@@ -46,6 +47,7 @@ export default function TeacherPage() {
     if (!user?.schoolId) return;
     setLoading(true);
     setLoaded(false);
+    setError(null);
     try {
       const { data: userData } = await supabase
         .from('users')
@@ -104,7 +106,8 @@ export default function TeacherPage() {
 
       setLoaded(true);
     } catch (err: any) {
-      toast.error(err.message || 'Failed to load');
+      console.error('Failed to load teacher data:', err);
+      setError(err.message || 'Failed to load data. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -225,6 +228,13 @@ export default function TeacherPage() {
       </div>
 
       <div className="px-4 py-4 max-w-lg mx-auto">
+        {error && !loading && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4 text-center">
+            <p className="text-red-700 font-medium text-sm mb-2">{error}</p>
+            <button onClick={() => { setError(null); loadData(); }} className="text-sm text-[#0D9488] font-semibold hover:underline">Retry</button>
+          </div>
+        )}
+
         {/* ATTENDANCE TAB */}
         {activeTab === 'attendance' && (
           <>
