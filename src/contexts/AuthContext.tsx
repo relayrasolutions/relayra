@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { supabase, AppUser } from '@/lib/supabase';
+import { supabase, AppUser, withTimeout } from '@/lib/supabase';
 import type { Session } from '@supabase/supabase-js';
 
 interface AuthContextType {
@@ -22,132 +22,177 @@ const AuthContext = createContext<AuthContextType>({
   refreshUser: async () => {},
 });
 
+async function fetchAppUser(authId: string, userEmail?: string): Promise<AppUser | null> {
+  try {
+    const { data, error } = await withTimeout(
+      supabase.from('users').select('*').eq('auth_id', authId).single(),
+      5000,
+      'User lookup',
+    );
+
+    if (!error && data) {
+      return {
+        id: data.id,
+        authId: data.auth_id,
+        email: data.email,
+        role: data.role,
+        schoolId: data.school_id,
+        name: data.name,
+        phone: data.phone,
+        isActive: data.is_active,
+      };
+    }
+
+    // No record found — try to auto-provision by email
+    if (userEmail) {
+      try {
+        const { data: provisionedData, error: provisionError } = await withTimeout(
+          supabase.rpc('auto_provision_user', { p_auth_id: authId, p_email: userEmail }),
+          5000,
+          'Auto-provision',
+        );
+
+        if (!provisionError && provisionedData && provisionedData.length > 0) {
+          const pd = provisionedData[0];
+          return {
+            id: pd.id,
+            authId: pd.auth_id,
+            email: pd.email,
+            role: pd.role,
+            schoolId: pd.school_id,
+            name: pd.name,
+            phone: null,
+            isActive: pd.is_active,
+          };
+        }
+      } catch {
+        // Auto-provision failed — fall through
+      }
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchAppUser = async (authId: string, userEmail?: string): Promise<AppUser | null> => {
-    try {
-      // First try to fetch existing record
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('auth_id', authId)
-        .single();
-
-      if (!error && data) {
-        return {
-          id: data.id,
-          authId: data.auth_id,
-          email: data.email,
-          role: data.role,
-          schoolId: data.school_id,
-          name: data.name,
-          phone: data.phone,
-          isActive: data.is_active,
-        };
-      }
-
-      // If no record found and we have an email, try to auto-provision
-      if (userEmail) {
-        try {
-          const { data: provisionedData, error: provisionError } = await supabase
-            .rpc('auto_provision_user', {
-              p_auth_id: authId,
-              p_email: userEmail,
-            });
-
-          if (!provisionError && provisionedData && provisionedData.length > 0) {
-            const pd = provisionedData[0];
-            return {
-              id: pd.id,
-              authId: pd.auth_id,
-              email: pd.email,
-              role: pd.role,
-              schoolId: pd.school_id,
-              name: pd.name,
-              phone: null,
-              isActive: pd.is_active,
-            };
-          }
-        } catch {
-          // Auto-provision failed, return null
-        }
-      }
-
-      return null;
-    } catch {
-      return null;
-    }
-  };
-
   const refreshUser = async () => {
-    const { data: { session: currentSession } } = await supabase.auth.getSession();
-    if (currentSession?.user) {
-      const appUser = await fetchAppUser(currentSession.user.id, currentSession.user.email);
-      setUser(appUser);
+    try {
+      const { data: { session: currentSession } } = await withTimeout(
+        supabase.auth.getSession(),
+        5000,
+        'Session refresh',
+      );
+      if (currentSession?.user) {
+        const appUser = await fetchAppUser(currentSession.user.id, currentSession.user.email);
+        setUser(appUser);
+      }
+    } catch {
+      // ignore — refreshUser is a best-effort call
     }
   };
 
   useEffect(() => {
-    // Safety timeout: if auth check takes >5s, force unblock the app
-    const timeout = setTimeout(() => {
-      setLoading(false);
+    let cancelled = false;
+
+    // Hard safety timeout: if initial auth check takes >5s for any reason, unblock the app
+    const safetyTimer = setTimeout(() => {
+      if (!cancelled) setLoading(false);
     }, 5000);
 
-    supabase.auth.getSession().then(async ({ data: { session: s }, error }) => {
-      clearTimeout(timeout);
-      if (error) {
-        // Session is stale/invalid — clear it silently
-        try { await supabase.auth.signOut(); } catch {}
-        setSession(null);
-        setUser(null);
-        setLoading(false);
-        return;
+    const initAuth = async () => {
+      try {
+        const { data: { session: s }, error } = await withTimeout(
+          supabase.auth.getSession(),
+          5000,
+          'getSession',
+        );
+        if (cancelled) return;
+        if (error) {
+          // Stale/invalid session — clear it silently
+          try { await supabase.auth.signOut(); } catch {}
+          setSession(null);
+          setUser(null);
+          return;
+        }
+        setSession(s);
+        if (s?.user) {
+          const appUser = await fetchAppUser(s.user.id, s.user.email);
+          if (!cancelled) setUser(appUser);
+        }
+      } catch {
+        // Network error / timeout — unblock app, treat as signed out
+        if (!cancelled) {
+          setSession(null);
+          setUser(null);
+        }
+      } finally {
+        if (!cancelled) {
+          clearTimeout(safetyTimer);
+          setLoading(false);
+        }
       }
-      setSession(s);
-      if (s?.user) {
-        const appUser = await fetchAppUser(s.user.id, s.user.email);
-        setUser(appUser);
-      }
-      setLoading(false);
-    }).catch(() => {
-      clearTimeout(timeout);
-      // Network error or timeout — don't block the app
-      setSession(null);
-      setUser(null);
-      setLoading(false);
-    });
+    };
+
+    initAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, s) => {
-      setSession(s);
-      if (s?.user) {
-        const appUser = await fetchAppUser(s.user.id, s.user.email);
-        setUser(appUser);
-        if (event === 'SIGNED_IN') {
-          await supabase.from('users').update({ last_login_at: new Date().toISOString() }).eq('auth_id', s.user.id);
+      if (cancelled) return;
+      try {
+        setSession(s);
+        if (s?.user) {
+          const appUser = await fetchAppUser(s.user.id, s.user.email);
+          if (!cancelled) setUser(appUser);
+
+          // Fire-and-forget — never block auth state on this
+          if (event === 'SIGNED_IN') {
+            supabase.from('users')
+              .update({ last_login_at: new Date().toISOString() })
+              .eq('auth_id', s.user.id)
+              .then(() => {}, () => {});
+          }
+        } else {
+          setUser(null);
         }
-      } else {
-        setUser(null);
+      } catch {
+        // Swallow — never let auth state handler hang the UI
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => {
-      clearTimeout(timeout);
+      cancelled = true;
+      clearTimeout(safetyTimer);
       subscription.unsubscribe();
     };
   }, []);
 
   const signIn = async (email: string, password: string): Promise<{ error: string | null }> => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) return { error: error.message };
-    return { error: null };
+    try {
+      const { error } = await withTimeout(
+        supabase.auth.signInWithPassword({ email, password }),
+        10000,
+        'Sign in',
+      );
+      if (error) return { error: error.message };
+      return { error: null };
+    } catch (e: any) {
+      return { error: e?.message || 'Sign in failed. Please try again.' };
+    }
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      // ignore
+    }
     setUser(null);
     setSession(null);
   };

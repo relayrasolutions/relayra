@@ -27,9 +27,9 @@ export default function RootPage() {
   useEffect(() => {
     if (!loading && user) {
       setRedirecting(true);
-      if (user.role === 'super_admin') router.push('/admin');
-      else if (user.role === 'school_staff') router.push('/teacher');
-      else router.push('/dashboard');
+      if (user.role === 'super_admin') router.replace('/admin');
+      else if (user.role === 'school_staff') router.replace('/teacher');
+      else router.replace('/dashboard');
     }
   }, [user, loading, router]);
 
