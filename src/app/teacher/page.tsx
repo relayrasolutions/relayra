@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase, formatPhone, timeAgo, withTimeout } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
@@ -50,12 +50,15 @@ export default function TeacherPage() {
   const [assignedSection, setAssignedSection] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const today = new Date().toISOString().split('T')[0];
+  const lastVisibilityCheck = useRef<number>(0);
 
-  const loadData = useCallback(async () => {
-    if (!user?.schoolId) { setLoading(false); return; }
-    setLoading(true);
-    setLoaded(false);
-    setError(null);
+  const loadData = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
+    if (!user?.schoolId) { if (!silent) setLoading(false); return; }
+    if (!silent) {
+      setLoading(true);
+      setLoaded(false);
+      setError(null);
+    }
     try {
       const { data: userData } = await withTimeout(
         supabase.from('users').select('assigned_class, assigned_section').eq('id', user.id).single(),
@@ -106,21 +109,36 @@ export default function TeacherPage() {
         id: m.id, title: m.title, body: m.body, type: m.type,
         sentAt: m.sent_at, recipientCount: m.recipient_count,
       })));
-      setLoaded(true);
+      if (!silent) setLoaded(true);
     } catch (err: any) {
       console.error('Failed to load teacher data:', err);
-      setError(err.message || 'Failed to load data.');
-    } finally { setLoading(false); }
+      if (!silent) setError(err.message || 'Failed to load data.');
+    } finally { if (!silent) setLoading(false); }
   }, [user?.schoolId, user?.id, today]);
 
   useEffect(() => { loadData(); }, [loadData]);
   useEffect(() => { if (!authLoading && !user) router.replace('/login'); }, [authLoading, user, router]);
 
+  // Lenient visibility handler: silent refetch on focus, only redirect if
+  // session is explicitly null, never redirect on error. 30s cooldown.
   useEffect(() => {
     const handleVisibility = async () => {
       if (document.visibilityState !== 'visible') return;
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) loadData(); else router.replace('/login');
+      const now = Date.now();
+      if (now - lastVisibilityCheck.current < 30000) return;
+      lastVisibilityCheck.current = now;
+
+      try {
+        const { data, error } = await supabase.auth.getSession();
+        if (error) return;
+        if (data.session) {
+          loadData({ silent: true });
+        } else {
+          router.replace('/login');
+        }
+      } catch {
+        // network/timeout — do not redirect
+      }
     };
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
