@@ -92,8 +92,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => { fetchSchoolName(); fetchBadges(); }, [fetchSchoolName, fetchBadges]);
 
   useEffect(() => {
-    if (!loading && !user) router.push('/login');
-    if (!loading && user?.role === 'school_staff' && !pathname.startsWith('/teacher')) router.push('/teacher');
+    if (!loading && !user) router.replace('/login');
+    if (!loading && user?.role === 'school_staff' && !pathname.startsWith('/teacher')) router.replace('/teacher');
   }, [user, loading, router, pathname]);
 
   if (loading) {
@@ -174,7 +174,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <p className="text-white text-[13px] font-medium truncate">{user.name}</p>
               <p className="text-white/35 text-[11px] capitalize truncate">{user.role.replace(/_/g, ' ')}</p>
             </div>
-            <button onClick={async () => { await signOut(); router.push('/login'); }} className="text-white/35 hover:text-white transition-colors" title="Sign out">
+            <button onClick={async () => { await signOut(); router.replace('/login'); }} className="text-white/35 hover:text-white transition-colors" title="Sign out">
               <Icon name="ArrowRightOnRectangleIcon" size={16} className="text-white/35 hover:text-white" />
             </button>
           </div>

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase, formatCurrency, timeAgo, formatDate } from '@/lib/supabase';
+import { supabase, formatCurrency, timeAgo, formatDate, withTimeout } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import AppLayout from '@/components/AppLayout';
 import Icon from '@/components/ui/AppIcon';
@@ -60,14 +60,18 @@ export default function AdminPage() {
     setLoading(true);
     setError(null);
     try {
-      const [schoolsRes, studentsRes, feesRes, messagesRes, usersRes, activityRes] = await Promise.all([
-        supabase.from('schools').select('*').order('created_at', { ascending: false }),
-        supabase.from('students').select('id, school_id, status'),
-        supabase.from('fee_records').select('school_id, paid_amount, total_amount, status, payment_date'),
-        supabase.from('messages').select('id, school_id, delivered_count, sent_count, created_at, type'),
-        supabase.from('users').select('id, school_id, last_login_at, role').neq('role', 'super_admin'),
-        supabase.from('activity_log').select('id, action, description, entity_type, created_at, school_id').order('created_at', { ascending: false }).limit(20),
-      ]);
+      const [schoolsRes, studentsRes, feesRes, messagesRes, usersRes, activityRes] = await withTimeout(
+        Promise.all([
+          supabase.from('schools').select('*').order('created_at', { ascending: false }),
+          supabase.from('students').select('id, school_id, status'),
+          supabase.from('fee_records').select('school_id, paid_amount, total_amount, status, payment_date'),
+          supabase.from('messages').select('id, school_id, delivered_count, sent_count, created_at, type'),
+          supabase.from('users').select('id, school_id, last_login_at, role').neq('role', 'super_admin'),
+          supabase.from('activity_log').select('id, action, description, entity_type, created_at, school_id').order('created_at', { ascending: false }).limit(20),
+        ]),
+        15000,
+        'Admin data fetch',
+      );
 
       const studentsBySchool: Record<string, number> = {};
       (studentsRes.data || []).filter(s => s.status === 'active').forEach(s => {

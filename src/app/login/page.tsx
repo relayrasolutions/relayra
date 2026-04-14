@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/lib/supabase';
+import { supabase, withTimeout } from '@/lib/supabase';
 import toast from 'react-hot-toast';
 
 export default function LoginPage() {
@@ -16,14 +16,24 @@ export default function LoginPage() {
   const { signIn, user: authUser, loading: authLoading } = useAuth();
   const router = useRouter();
 
-  // Redirect if already authenticated
+  // Redirect if already authenticated — use replace so back button doesn't return here
   useEffect(() => {
     if (!authLoading && authUser) {
-      if (authUser.role === 'super_admin') router.push('/admin');
-      else if (authUser.role === 'school_staff') router.push('/teacher');
-      else router.push('/dashboard');
+      if (authUser.role === 'super_admin') router.replace('/admin');
+      else if (authUser.role === 'school_staff') router.replace('/teacher');
+      else router.replace('/dashboard');
     }
   }, [authLoading, authUser, router]);
+
+  // Hard 10s timeout on the sign-in flow. If still loading after 10s, bail out.
+  useEffect(() => {
+    if (!loading) return;
+    const timer = setTimeout(() => {
+      setLoading(false);
+      toast.error('Login timed out. Please try again.');
+    }, 10000);
+    return () => clearTimeout(timer);
+  }, [loading]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,8 +54,12 @@ export default function LoginPage() {
     setLoadingMessage('Loading your profile...');
 
     try {
-      // Get the authenticated session
-      const { data: { session } } = await supabase.auth.getSession();
+      // Get the authenticated session (timed)
+      const { data: { session } } = await withTimeout(
+        supabase.auth.getSession(),
+        5000,
+        'Session fetch',
+      );
       if (!session?.user) {
         toast.error('Session not found. Please try again.');
         setLoading(false);
@@ -55,25 +69,37 @@ export default function LoginPage() {
       const authUserId = session.user.id;
       const userEmail = session.user.email || email;
 
-      // Try to fetch existing user record
-      let { data: userData, error: fetchError } = await supabase
-        .from('users')
-        .select('role, school_id, name')
-        .eq('auth_id', authUserId)
-        .single();
+      // Try to fetch existing user record (timed)
+      let userData: { role: string; school_id: string | null; name: string } | null = null;
+      try {
+        const { data, error: fetchError } = await withTimeout(
+          supabase.from('users').select('role, school_id, name').eq('auth_id', authUserId).single(),
+          5000,
+          'User lookup',
+        );
+        if (!fetchError && data) userData = data as typeof userData;
+      } catch (e) {
+        console.error('User lookup failed:', e);
+      }
 
-      // If no record found, auto-provision using the database function
-      if (fetchError || !userData) {
+      // If no record found, auto-provision via RPC
+      if (!userData) {
         setLoadingMessage('Setting up your account...');
+        try {
+          const { data: provisionedData, error: provisionError } = await withTimeout(
+            supabase.rpc('auto_provision_user', { p_auth_id: authUserId, p_email: userEmail }),
+            5000,
+            'Auto-provision',
+          );
+          if (!provisionError && provisionedData && provisionedData.length > 0) {
+            userData = provisionedData[0];
+          }
+        } catch (e) {
+          console.error('Auto-provision failed:', e);
+        }
 
-        const { data: provisionedData, error: provisionError } = await supabase
-          .rpc('auto_provision_user', {
-            p_auth_id: authUserId,
-            p_email: userEmail,
-          });
-
-        if (provisionError || !provisionedData || provisionedData.length === 0) {
-          // Fallback: try direct insert based on known emails
+        // Fallback: direct upsert based on known demo emails
+        if (!userData) {
           const roleMap: Record<string, { role: string; name: string }> = {
             'admin@relayrasolutions.com': { role: 'super_admin', name: 'Relayra Admin' },
             'admin@dps-moradabad.com': { role: 'school_admin', name: 'DPS Admin' },
@@ -82,52 +108,60 @@ export default function LoginPage() {
 
           const mapped = roleMap[userEmail.toLowerCase()];
           if (mapped) {
-            // Get school_id for school-linked users
             let schoolId: string | null = null;
             if (mapped.role !== 'super_admin') {
-              const { data: schoolData } = await supabase
-                .from('schools')
-                .select('id')
-                .eq('slug', 'dps-moradabad')
-                .single();
-              schoolId = schoolData?.id || null;
+              try {
+                const { data: schoolData } = await withTimeout(
+                  supabase.from('schools').select('id').eq('slug', 'dps-moradabad').single(),
+                  5000,
+                  'School lookup',
+                );
+                schoolId = schoolData?.id || null;
+              } catch { /* ignore */ }
             }
 
-            await supabase.from('users').upsert({
-              auth_id: authUserId,
-              email: userEmail,
-              role: mapped.role,
-              name: mapped.name,
-              school_id: schoolId,
-              assigned_class: userEmail === 'teacher.7a@dps-moradabad.com' ? '7' : null,
-              assigned_section: userEmail === 'teacher.7a@dps-moradabad.com' ? 'A' : null,
-              is_active: true,
-            }, { onConflict: 'auth_id' });
-
-            userData = { role: mapped.role, school_id: schoolId, name: mapped.name };
-          } else {
-            toast.error('Could not set up your account. Please contact support.');
-            setLoading(false);
-            return;
+            try {
+              await withTimeout(
+                supabase.from('users').upsert({
+                  auth_id: authUserId,
+                  email: userEmail,
+                  role: mapped.role,
+                  name: mapped.name,
+                  school_id: schoolId,
+                  assigned_class: userEmail === 'teacher.7a@dps-moradabad.com' ? '7' : null,
+                  assigned_section: userEmail === 'teacher.7a@dps-moradabad.com' ? 'A' : null,
+                  is_active: true,
+                }, { onConflict: 'auth_id' }),
+                5000,
+                'User upsert',
+              );
+              userData = { role: mapped.role, school_id: schoolId, name: mapped.name };
+            } catch (e) {
+              console.error('Fallback upsert failed:', e);
+            }
           }
-        } else {
-          userData = provisionedData[0];
+        }
+
+        if (!userData) {
+          toast.error('Login failed. Please try again.');
+          setLoading(false);
+          return;
         }
       }
 
       setLoadingMessage('Redirecting...');
 
-      // Redirect based on role
-      if (userData?.role === 'super_admin') {
-        router.push('/admin');
-      } else if (userData?.role === 'school_staff') {
-        router.push('/teacher');
+      // Redirect based on role — use replace so back button won't return to login
+      if (userData.role === 'super_admin') {
+        router.replace('/admin');
+      } else if (userData.role === 'school_staff') {
+        router.replace('/teacher');
       } else {
-        router.push('/dashboard');
+        router.replace('/dashboard');
       }
     } catch (err) {
       console.error('Login redirect error:', err);
-      toast.error('Login succeeded but redirect failed. Please refresh.');
+      toast.error('Login failed. Please try again.');
       setLoading(false);
     }
   };
@@ -138,15 +172,21 @@ export default function LoginPage() {
       return;
     }
     setForgotLoading(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
-    });
-    if (error) {
-      toast.error(error.message);
-    } else {
-      toast.success('Password reset email sent!');
+    try {
+      const { error } = await withTimeout(
+        supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/reset-password`,
+        }),
+        10000,
+        'Password reset',
+      );
+      if (error) toast.error(error.message);
+      else toast.success('Password reset email sent!');
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to send reset email');
+    } finally {
+      setForgotLoading(false);
     }
-    setForgotLoading(false);
   };
 
   return (

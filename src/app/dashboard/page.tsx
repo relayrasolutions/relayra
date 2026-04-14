@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { supabase, formatCurrency, timeAgo, formatDate } from '@/lib/supabase';
+import { supabase, formatCurrency, timeAgo, formatDate, withTimeout } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import AppLayout from '@/components/AppLayout';
 import Icon from '@/components/ui/AppIcon';
@@ -60,14 +60,18 @@ export default function DashboardPage() {
       const today = new Date().toISOString().split('T')[0];
       const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
 
-      const [studentsRes, attendanceRes, feeRes, messagesRes, queriesRes, activityRes] = await Promise.all([
-        supabase.from('students').select('id, created_at, class, section').eq('school_id', user.schoolId).eq('status', 'active'),
-        supabase.from('attendance').select('status').eq('school_id', user.schoolId).eq('date', today),
-        supabase.from('fee_records').select('id, student_id, paid_amount, total_amount, status, payment_date, due_date, students!inner(name, class, section)').eq('school_id', user.schoolId),
-        supabase.from('messages').select('id, type, title, body, recipient_count, sent_count, delivered_count, status, sent_at, created_at').eq('school_id', user.schoolId).order('created_at', { ascending: false }).limit(10),
-        supabase.from('parent_queries').select('id').eq('school_id', user.schoolId).eq('status', 'pending'),
-        supabase.from('activity_log').select('id, action, description, created_at').eq('school_id', user.schoolId).order('created_at', { ascending: false }).limit(10),
-      ]);
+      const [studentsRes, attendanceRes, feeRes, messagesRes, queriesRes, activityRes] = await withTimeout(
+        Promise.all([
+          supabase.from('students').select('id, created_at, class, section').eq('school_id', user.schoolId).eq('status', 'active'),
+          supabase.from('attendance').select('status').eq('school_id', user.schoolId).eq('date', today),
+          supabase.from('fee_records').select('id, student_id, paid_amount, total_amount, status, payment_date, due_date, students!inner(name, class, section)').eq('school_id', user.schoolId),
+          supabase.from('messages').select('id, type, title, body, recipient_count, sent_count, delivered_count, status, sent_at, created_at').eq('school_id', user.schoolId).order('created_at', { ascending: false }).limit(10),
+          supabase.from('parent_queries').select('id').eq('school_id', user.schoolId).eq('status', 'pending'),
+          supabase.from('activity_log').select('id, action, description, created_at').eq('school_id', user.schoolId).order('created_at', { ascending: false }).limit(10),
+        ]),
+        15000,
+        'Dashboard fetch',
+      );
 
       const students = studentsRes.data || [];
       const attendance = attendanceRes.data || [];
@@ -137,10 +141,14 @@ export default function DashboardPage() {
       }
       setFeeChartData(feeChart);
 
-      // Attendance chart - last 14 days (single query)
+      // Attendance chart - last 14 days (single range query — NOT a loop of 14 queries)
       const fourteenDaysAgo = new Date(); fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 13);
       const startDateStr = fourteenDaysAgo.toISOString().split('T')[0];
-      const { data: allAttData } = await supabase.from('attendance').select('date, status').eq('school_id', user.schoolId).gte('date', startDateStr).lte('date', today);
+      const { data: allAttData } = await withTimeout(
+        supabase.from('attendance').select('date, status').eq('school_id', user.schoolId).gte('date', startDateStr).lte('date', today),
+        10000,
+        'Attendance trend fetch',
+      );
       const attByDate: Record<string, { total: number; present: number }> = {};
       (allAttData || []).forEach(a => {
         if (!attByDate[a.date]) attByDate[a.date] = { total: 0, present: 0 };

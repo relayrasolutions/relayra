@@ -177,6 +177,21 @@ export function formatPhone(phone: string | null): string {
   return phone;
 }
 
+// Race a promise (or thenable — Supabase query builders are PromiseLike, not Promise)
+// against a timeout. If the promise doesn't settle in `ms`, rejects with a timeout
+// error. Use this to bulletproof any Supabase call that could hang.
+export function withTimeout<T>(promise: PromiseLike<T>, ms: number, label = 'Request'): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s`));
+    }, ms);
+    promise.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); },
+    );
+  });
+}
+
 // Time ago
 export function timeAgo(dateStr: string): string {
   const date = new Date(dateStr);

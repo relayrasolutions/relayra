@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase, formatPhone, timeAgo } from '@/lib/supabase';
+import { supabase, formatPhone, timeAgo, withTimeout } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import Icon from '@/components/ui/AppIcon';
 import toast from 'react-hot-toast';
@@ -52,12 +52,16 @@ export default function TeacherPage() {
   const today = new Date().toISOString().split('T')[0];
 
   const loadData = useCallback(async () => {
-    if (!user?.schoolId) return;
+    if (!user?.schoolId) { setLoading(false); return; }
     setLoading(true);
     setLoaded(false);
     setError(null);
     try {
-      const { data: userData } = await supabase.from('users').select('assigned_class, assigned_section').eq('id', user.id).single();
+      const { data: userData } = await withTimeout(
+        supabase.from('users').select('assigned_class, assigned_section').eq('id', user.id).single(),
+        10000,
+        'Teacher profile fetch',
+      );
       const cls = userData?.assigned_class || '';
       const sec = userData?.assigned_section || '';
       setAssignedClass(cls);
@@ -65,13 +69,21 @@ export default function TeacherPage() {
 
       if (!cls) { setLoading(false); return; }
 
-      const { data: studentsData } = await supabase.from('students')
-        .select('id, name, roll_number, class, section, parent_name, parent_phone, religion')
-        .eq('school_id', user.schoolId).eq('class', cls).eq('section', sec || 'A').eq('status', 'active').order('roll_number');
+      const { data: studentsData } = await withTimeout(
+        supabase.from('students')
+          .select('id, name, roll_number, class, section, parent_name, parent_phone, religion')
+          .eq('school_id', user.schoolId).eq('class', cls).eq('section', sec || 'A').eq('status', 'active').order('roll_number'),
+        10000,
+        'Students fetch',
+      );
 
-      const { data: attData } = await supabase.from('attendance')
-        .select('student_id, status').eq('school_id', user.schoolId).eq('date', today)
-        .in('student_id', (studentsData || []).map(s => s.id));
+      const { data: attData } = await withTimeout(
+        supabase.from('attendance')
+          .select('student_id, status').eq('school_id', user.schoolId).eq('date', today)
+          .in('student_id', (studentsData || []).map(s => s.id)),
+        10000,
+        'Attendance fetch',
+      );
 
       const attMap: Record<string, string> = {};
       (attData || []).forEach(a => { attMap[a.student_id] = a.status; });
@@ -82,9 +94,13 @@ export default function TeacherPage() {
       })));
       setAttendance(attMap);
 
-      const { data: msgData } = await supabase.from('messages')
-        .select('id, title, body, type, sent_at, recipient_count')
-        .eq('school_id', user.schoolId).order('created_at', { ascending: false }).limit(20);
+      const { data: msgData } = await withTimeout(
+        supabase.from('messages')
+          .select('id, title, body, type, sent_at, recipient_count')
+          .eq('school_id', user.schoolId).order('created_at', { ascending: false }).limit(20),
+        10000,
+        'Messages fetch',
+      );
 
       setMessages((msgData || []).map(m => ({
         id: m.id, title: m.title, body: m.body, type: m.type,
