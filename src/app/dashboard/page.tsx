@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase, formatCurrency, timeAgo, formatDate, withTimeout } from '@/lib/supabase';
@@ -51,11 +51,14 @@ export default function DashboardPage() {
   const [recentMessages, setRecentMessages] = useState<RecentMessage[]>([]);
   const [activityLog, setActivityLog] = useState<ActivityItem[]>([]);
   const [loadingStale, setLoadingStale] = useState(false);
+  const lastVisibilityCheck = useRef<number>(0);
 
-  const fetchDashboard = useCallback(async () => {
-    if (!user?.schoolId) { setLoading(false); return; }
-    setLoading(true);
-    setError(null);
+  const fetchDashboard = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
+    if (!user?.schoolId) { if (!silent) setLoading(false); return; }
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const today = new Date().toISOString().split('T')[0];
       const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
@@ -169,18 +172,33 @@ export default function DashboardPage() {
       setAttendanceChartData(attChart);
     } catch (err: any) {
       console.error('Failed to load dashboard:', err);
-      setError(err.message || 'Failed to load dashboard data.');
-    } finally { setLoading(false); }
+      if (!silent) setError(err.message || 'Failed to load dashboard data.');
+    } finally { if (!silent) setLoading(false); }
   }, [user?.schoolId]);
 
   useEffect(() => { if (!authLoading && !user) router.replace('/login'); }, [authLoading, user, router]);
   useEffect(() => { fetchDashboard(); }, [fetchDashboard]);
 
+  // Lenient visibility handler: silent refetch on focus, only redirect if
+  // session is explicitly null, never redirect on error. 30s cooldown.
   useEffect(() => {
     const handleVisibility = async () => {
       if (document.visibilityState !== 'visible') return;
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) fetchDashboard(); else router.replace('/login');
+      const now = Date.now();
+      if (now - lastVisibilityCheck.current < 30000) return;
+      lastVisibilityCheck.current = now;
+
+      try {
+        const { data, error } = await supabase.auth.getSession();
+        if (error) return;
+        if (data.session) {
+          fetchDashboard({ silent: true });
+        } else {
+          router.replace('/login');
+        }
+      } catch {
+        // network/timeout — do not redirect
+      }
     };
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);

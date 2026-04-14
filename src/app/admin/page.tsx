@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase, formatCurrency, timeAgo, formatDate, withTimeout } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
@@ -54,11 +54,14 @@ export default function AdminPage() {
   const [adding, setAdding] = useState(false);
   const [loadingStale, setLoadingStale] = useState(false);
   const [lastUpdated, setLastUpdated] = useState('');
+  const lastVisibilityCheck = useRef<number>(0);
 
-  const fetchData = useCallback(async () => {
-    if (user?.role !== 'super_admin') { setLoading(false); return; }
-    setLoading(true);
-    setError(null);
+  const fetchData = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
+    if (user?.role !== 'super_admin') { if (!silent) setLoading(false); return; }
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const [schoolsRes, studentsRes, feesRes, messagesRes, usersRes, activityRes] = await withTimeout(
         Promise.all([
@@ -174,19 +177,36 @@ export default function AdminPage() {
       setLastUpdated(new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }));
     } catch (err: any) {
       console.error('Failed to load admin data:', err);
-      setError(err.message || 'Failed to load data. Please try again.');
+      if (!silent) setError(err.message || 'Failed to load data. Please try again.');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [user?.role]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // Lenient visibility handler: on tab focus, silently refetch if session is
+  // still valid, redirect to /login ONLY if session is definitively null, and
+  // do nothing on any error (network / timeout / etc) so network blips do not
+  // log the user out. 30-second cooldown between checks.
   useEffect(() => {
     const handleVisibility = async () => {
       if (document.visibilityState !== 'visible') return;
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) fetchData(); else router.replace('/login');
+      const now = Date.now();
+      if (now - lastVisibilityCheck.current < 30000) return;
+      lastVisibilityCheck.current = now;
+
+      try {
+        const { data, error } = await supabase.auth.getSession();
+        if (error) return; // don't redirect on error
+        if (data.session) {
+          fetchData({ silent: true });
+        } else {
+          router.replace('/login');
+        }
+      } catch {
+        // network/timeout — do not redirect
+      }
     };
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
