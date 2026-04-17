@@ -16,7 +16,9 @@ export default function LoginPage() {
   const { signIn, user: authUser, loading: authLoading } = useAuth();
   const router = useRouter();
 
-  // Redirect if already authenticated — use replace so back button doesn't return here
+  // Redirect if already authenticated — use replace so back button doesn't
+  // return to login, and use client-side nav here (not a full reload) since
+  // the existing session's user matches.
   useEffect(() => {
     if (!authLoading && authUser) {
       if (authUser.role === 'super_admin') router.replace('/admin');
@@ -151,13 +153,16 @@ export default function LoginPage() {
 
       setLoadingMessage('Redirecting...');
 
-      // Redirect based on role — use replace so back button won't return to login
+      // Force a full page reload after successful login so that any cached
+      // React state from a previous user's session is discarded. Using
+      // window.location.href (not router.replace) ensures a fresh document
+      // and fresh data fetches. See Issue 9 in the auth overhaul spec.
       if (userData.role === 'super_admin') {
-        router.replace('/admin');
+        window.location.href = '/admin';
       } else if (userData.role === 'school_staff') {
-        router.replace('/teacher');
+        window.location.href = '/teacher';
       } else {
-        router.replace('/dashboard');
+        window.location.href = '/dashboard';
       }
     } catch (err) {
       console.error('Login redirect error:', err);

@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase, formatPhone, timeAgo, withTimeout } from '@/lib/supabase';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth, isSessionExpired, clearLoginTs } from '@/contexts/AuthContext';
 import Icon from '@/components/ui/AppIcon';
 import toast from 'react-hot-toast';
 
@@ -50,7 +50,6 @@ export default function TeacherPage() {
   const [assignedSection, setAssignedSection] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const today = new Date().toISOString().split('T')[0];
-  const lastVisibilityCheck = useRef<number>(0);
 
   const loadData = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
     if (!user?.schoolId) { if (!silent) setLoading(false); return; }
@@ -119,30 +118,29 @@ export default function TeacherPage() {
   useEffect(() => { loadData(); }, [loadData]);
   useEffect(() => { if (!authLoading && !user) router.replace('/login'); }, [authLoading, user, router]);
 
-  // Lenient visibility handler: silent refetch on focus, only redirect if
-  // session is explicitly null, never redirect on error. 30s cooldown.
+  // 24-hour hard session check on mount — if the recorded login time is
+  // older than 24h, force sign-out and redirect. No visibility listener: we
+  // never check auth on tab focus (that would log users out for network
+  // blips or idle tabs). See Issues 2 & 8 in the auth overhaul spec.
   useEffect(() => {
-    const handleVisibility = async () => {
-      if (document.visibilityState !== 'visible') return;
-      const now = Date.now();
-      if (now - lastVisibilityCheck.current < 30000) return;
-      lastVisibilityCheck.current = now;
+    if (isSessionExpired()) {
+      clearLoginTs();
+      supabase.auth.signOut().finally(() => router.replace('/login'));
+    }
+  }, [router]);
 
-      try {
-        const { data, error } = await supabase.auth.getSession();
-        if (error) return;
-        if (data.session) {
-          loadData({ silent: true });
-        } else {
-          router.replace('/login');
-        }
-      } catch {
-        // network/timeout — do not redirect
+  // Back/Forward cache protection — if the user navigates here via the
+  // browser's bfcache (back/forward button), force a reload so stale data
+  // and stale auth state are discarded. See Issue 3 in the spec.
+  useEffect(() => {
+    const handlePageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) {
+        window.location.reload();
       }
     };
-    document.addEventListener('visibilitychange', handleVisibility);
-    return () => document.removeEventListener('visibilitychange', handleVisibility);
-  }, [loadData, router]);
+    window.addEventListener('pageshow', handlePageShow);
+    return () => window.removeEventListener('pageshow', handlePageShow);
+  }, []);
 
   useEffect(() => {
     if (!loading) { setLoadingStale(false); return; }
@@ -248,7 +246,13 @@ export default function TeacherPage() {
               <p className="text-white text-[13px] font-medium truncate">{user.name}</p>
               <p className="text-white/35 text-[11px] truncate">Class Teacher</p>
             </div>
-            <button onClick={async () => { await signOut(); window.location.href = '/login'; }} className="text-white/35 hover:text-white" title="Sign out">
+            <button onClick={async () => {
+              // Clear state first (signOut empties user/session + localStorage),
+              // wait a tick so React state settles, then navigate. See Issue 5.
+              await signOut();
+              await new Promise((r) => setTimeout(r, 100));
+              router.replace('/login');
+            }} className="text-white/35 hover:text-white" title="Sign out">
               <Icon name="ArrowRightOnRectangleIcon" size={16} className="text-white/35" />
             </button>
           </div>

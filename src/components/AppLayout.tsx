@@ -174,7 +174,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <p className="text-white text-[13px] font-medium truncate">{user.name}</p>
               <p className="text-white/35 text-[11px] capitalize truncate">{user.role.replace(/_/g, ' ')}</p>
             </div>
-            <button onClick={async () => { await signOut(); router.replace('/login'); }} className="text-white/35 hover:text-white transition-colors" title="Sign out">
+            <button onClick={async () => {
+              // Clear state first (signOut empties user/session + localStorage),
+              // wait a tick so React state settles, then navigate. See Issue 5.
+              await signOut();
+              await new Promise((r) => setTimeout(r, 100));
+              router.replace('/login');
+            }} className="text-white/35 hover:text-white transition-colors" title="Sign out">
               <Icon name="ArrowRightOnRectangleIcon" size={16} className="text-white/35 hover:text-white" />
             </button>
           </div>
