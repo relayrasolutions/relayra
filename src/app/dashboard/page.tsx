@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase, formatCurrency, timeAgo, formatDate, withTimeout } from '@/lib/supabase';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth, isSessionExpired, clearLoginTs } from '@/contexts/AuthContext';
 import AppLayout from '@/components/AppLayout';
 import Icon from '@/components/ui/AppIcon';
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -51,7 +51,6 @@ export default function DashboardPage() {
   const [recentMessages, setRecentMessages] = useState<RecentMessage[]>([]);
   const [activityLog, setActivityLog] = useState<ActivityItem[]>([]);
   const [loadingStale, setLoadingStale] = useState(false);
-  const lastVisibilityCheck = useRef<number>(0);
 
   const fetchDashboard = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
     if (!user?.schoolId) { if (!silent) setLoading(false); return; }
@@ -179,30 +178,29 @@ export default function DashboardPage() {
   useEffect(() => { if (!authLoading && !user) router.replace('/login'); }, [authLoading, user, router]);
   useEffect(() => { fetchDashboard(); }, [fetchDashboard]);
 
-  // Lenient visibility handler: silent refetch on focus, only redirect if
-  // session is explicitly null, never redirect on error. 30s cooldown.
+  // 24-hour hard session check on mount — if the recorded login time is
+  // older than 24h, force sign-out and redirect. No visibility listener: we
+  // never check auth on tab focus (that would log users out for network
+  // blips or idle tabs). See Issues 2 & 8 in the auth overhaul spec.
   useEffect(() => {
-    const handleVisibility = async () => {
-      if (document.visibilityState !== 'visible') return;
-      const now = Date.now();
-      if (now - lastVisibilityCheck.current < 30000) return;
-      lastVisibilityCheck.current = now;
+    if (isSessionExpired()) {
+      clearLoginTs();
+      supabase.auth.signOut().finally(() => router.replace('/login'));
+    }
+  }, [router]);
 
-      try {
-        const { data, error } = await supabase.auth.getSession();
-        if (error) return;
-        if (data.session) {
-          fetchDashboard({ silent: true });
-        } else {
-          router.replace('/login');
-        }
-      } catch {
-        // network/timeout — do not redirect
+  // Back/Forward cache protection — if the user navigates here via the
+  // browser's bfcache (back/forward button), force a reload so stale data
+  // and stale auth state are discarded. See Issue 3 in the spec.
+  useEffect(() => {
+    const handlePageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) {
+        window.location.reload();
       }
     };
-    document.addEventListener('visibilitychange', handleVisibility);
-    return () => document.removeEventListener('visibilitychange', handleVisibility);
-  }, [fetchDashboard, router]);
+    window.addEventListener('pageshow', handlePageShow);
+    return () => window.removeEventListener('pageshow', handlePageShow);
+  }, []);
 
   useEffect(() => {
     if (!loading) { setLoadingStale(false); return; }

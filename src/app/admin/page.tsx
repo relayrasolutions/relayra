@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase, formatCurrency, timeAgo, formatDate, withTimeout } from '@/lib/supabase';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth, isSessionExpired, clearLoginTs } from '@/contexts/AuthContext';
 import AppLayout from '@/components/AppLayout';
 import Icon from '@/components/ui/AppIcon';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -54,7 +54,6 @@ export default function AdminPage() {
   const [adding, setAdding] = useState(false);
   const [loadingStale, setLoadingStale] = useState(false);
   const [lastUpdated, setLastUpdated] = useState('');
-  const lastVisibilityCheck = useRef<number>(0);
 
   const fetchData = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
     if (user?.role !== 'super_admin') { if (!silent) setLoading(false); return; }
@@ -185,32 +184,29 @@ export default function AdminPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Lenient visibility handler: on tab focus, silently refetch if session is
-  // still valid, redirect to /login ONLY if session is definitively null, and
-  // do nothing on any error (network / timeout / etc) so network blips do not
-  // log the user out. 30-second cooldown between checks.
+  // 24-hour hard session check on mount — if the recorded login time is
+  // older than 24h, force sign-out and redirect. No visibility listener: we
+  // never check auth on tab focus (that would log users out for network
+  // blips or idle tabs). See Issues 2 & 8 in the auth overhaul spec.
   useEffect(() => {
-    const handleVisibility = async () => {
-      if (document.visibilityState !== 'visible') return;
-      const now = Date.now();
-      if (now - lastVisibilityCheck.current < 30000) return;
-      lastVisibilityCheck.current = now;
+    if (isSessionExpired()) {
+      clearLoginTs();
+      supabase.auth.signOut().finally(() => router.replace('/login'));
+    }
+  }, [router]);
 
-      try {
-        const { data, error } = await supabase.auth.getSession();
-        if (error) return; // don't redirect on error
-        if (data.session) {
-          fetchData({ silent: true });
-        } else {
-          router.replace('/login');
-        }
-      } catch {
-        // network/timeout — do not redirect
+  // Back/Forward cache protection — if the user navigates here via the
+  // browser's bfcache (back/forward button), force a reload so stale data
+  // and stale auth state are discarded. See Issue 3 in the spec.
+  useEffect(() => {
+    const handlePageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) {
+        window.location.reload();
       }
     };
-    document.addEventListener('visibilitychange', handleVisibility);
-    return () => document.removeEventListener('visibilitychange', handleVisibility);
-  }, [fetchData, router]);
+    window.addEventListener('pageshow', handlePageShow);
+    return () => window.removeEventListener('pageshow', handlePageShow);
+  }, []);
 
   useEffect(() => {
     if (!loading) { setLoadingStale(false); return; }

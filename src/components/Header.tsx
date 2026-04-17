@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import AppLogo from '@/components/ui/AppLogo';
 import Icon from '@/components/ui/AppIcon';
+import { useAuth } from '@/contexts/AuthContext';
 
 const navLinks = [
   { label: 'Home', href: '/' },
@@ -10,9 +11,16 @@ const navLinks = [
   { label: 'Pricing', href: '/pricing' },
 ];
 
+function getDashboardHref(role: string | undefined): string {
+  if (role === 'super_admin') return '/admin';
+  if (role === 'school_staff') return '/teacher';
+  return '/dashboard';
+}
+
 export default function Header() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { user } = useAuth();
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 40);
@@ -28,6 +36,10 @@ export default function Header() {
     }
     return () => { document.body.style.overflow = ''; };
   }, [mobileOpen]);
+
+  const dashboardHref = getDashboardHref(user?.role);
+  const ctaLabel = user ? 'Dashboard' : 'Login';
+  const ctaHref = user ? dashboardHref : '/login';
 
   return (
     <header
@@ -65,10 +77,10 @@ export default function Header() {
           {/* Desktop CTA */}
           <div className="hidden md:flex items-center gap-3">
             <Link
-              href="/login"
+              href={ctaHref}
               className="px-5 py-2 text-sm font-semibold text-white bg-[#1E3A5F] hover:bg-[#162d4a] border border-white/20 rounded-lg transition-all duration-200"
             >
-              Login
+              {ctaLabel}
             </Link>
             <a
               href="https://wa.me/91XXXXXXXXXX?text=Hi%2C+I%27d+like+to+book+a+demo+for+Relayra+Solutions"
@@ -109,11 +121,11 @@ export default function Header() {
               </Link>
             ))}
             <Link
-              href="/login"
+              href={ctaHref}
               onClick={() => setMobileOpen(false)}
               className="block px-4 py-3.5 text-base font-medium text-teal hover:text-primary border-b border-border transition-colors"
             >
-              Login →
+              {ctaLabel} →
             </Link>
             <div className="mt-6">
               <a

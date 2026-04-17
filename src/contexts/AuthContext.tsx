@@ -23,13 +23,14 @@ const AuthContext = createContext<AuthContextType>({
 });
 
 // ---------- 24-hour hard session limit ----------
-// Regardless of Supabase's token refresh, we force a logout 24 hours after the
-// user's last actual login. The timestamp is recorded on SIGNED_IN and cleared
-// on SIGNED_OUT / signOut(). It lives in localStorage so it survives tab close.
-const LOGIN_TS_KEY = 'relayra_login_ts';
+// Regardless of Supabase's token refresh, we force a logout 24 hours after
+// the user's last actual login. The timestamp lives in localStorage so it
+// survives tab close. We only check this on page-load / initial auth — NOT
+// on tab focus (see Issue 2 in the auth overhaul spec).
+const LOGIN_TS_KEY = 'relayra_login_time';
 const SESSION_MAX_MS = 24 * 60 * 60 * 1000; // 24 hours
 
-function getLoginTs(): number | null {
+export function getLoginTs(): number | null {
   try {
     if (typeof window === 'undefined') return null;
     const raw = window.localStorage.getItem(LOGIN_TS_KEY);
@@ -41,7 +42,7 @@ function getLoginTs(): number | null {
   }
 }
 
-function setLoginTs(ts: number): void {
+export function setLoginTs(ts: number): void {
   try {
     if (typeof window !== 'undefined') window.localStorage.setItem(LOGIN_TS_KEY, String(ts));
   } catch {
@@ -49,7 +50,7 @@ function setLoginTs(ts: number): void {
   }
 }
 
-function clearLoginTs(): void {
+export function clearLoginTs(): void {
   try {
     if (typeof window !== 'undefined') window.localStorage.removeItem(LOGIN_TS_KEY);
   } catch {
@@ -57,7 +58,7 @@ function clearLoginTs(): void {
   }
 }
 
-function isSessionExpired(): boolean {
+export function isSessionExpired(): boolean {
   const ts = getLoginTs();
   if (ts === null) return false;
   return Date.now() - ts > SESSION_MAX_MS;
@@ -142,25 +143,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false;
 
-    // Hard safety timeout: if initial auth check takes >5s for any reason, unblock the app
+    // Hard safety timeout: if initial auth check takes >5s, unblock UI.
+    // Dashboards will then redirect to /login on their own if user is null.
     const safetyTimer = setTimeout(() => {
       if (!cancelled) setLoading(false);
     }, 5000);
-
-    const forceSignOutExpired = async () => {
-      try { await supabase.auth.signOut(); } catch {}
-      clearLoginTs();
-      if (!cancelled) {
-        setSession(null);
-        setUser(null);
-      }
-    };
 
     const initAuth = async () => {
       try {
         // 24-hour hard limit: if login timestamp is older than 24h, force sign-out
         if (isSessionExpired()) {
-          await forceSignOutExpired();
+          try { await supabase.auth.signOut(); } catch {}
+          clearLoginTs();
+          if (!cancelled) {
+            setSession(null);
+            setUser(null);
+          }
           return;
         }
 
@@ -171,7 +169,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         );
         if (cancelled) return;
         if (error) {
-          // Stale/invalid session — clear it silently
+          // Stale/invalid session — clear silently
           try { await supabase.auth.signOut(); } catch {}
           clearLoginTs();
           setSession(null);
@@ -180,15 +178,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         setSession(s);
         if (s?.user) {
-          // Pre-existing session with no recorded login time — treat as fresh to
-          // avoid unexpectedly logging out users who were already signed in before
-          // this feature shipped.
+          // Pre-existing session with no recorded login time — treat as fresh
+          // so we don't surprise-logout users who signed in before this feature.
           if (getLoginTs() === null) setLoginTs(Date.now());
 
           const appUser = await fetchAppUser(s.user.id, s.user.email);
           if (!cancelled) setUser(appUser);
         }
       } catch {
+        // Network / timeout — treat as signed out, but do NOT redirect from here.
+        // The landing page is public and dashboards own their own redirect logic.
         if (!cancelled) {
           setSession(null);
           setUser(null);
@@ -209,17 +208,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(s);
 
         if (s?.user) {
-          // Record a fresh login timestamp only on actual SIGNED_IN events.
-          // TOKEN_REFRESHED preserves the original login timestamp so the 24-hour
-          // window is measured from login, not from the last refresh.
+          // Record login timestamp only on real SIGNED_IN events.
+          // TOKEN_REFRESHED preserves the original stamp.
           if (event === 'SIGNED_IN') {
             setLoginTs(Date.now());
-          }
-
-          // Enforce the 24-hour hard limit on every auth state change
-          if (isSessionExpired()) {
-            await forceSignOutExpired();
-            return;
           }
 
           const appUser = await fetchAppUser(s.user.id, s.user.email);
@@ -243,28 +235,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
-    // Visibility listener: whenever the tab becomes visible, enforce the 24-hour
-    // hard limit. This is in addition to the per-page visibility handlers which
-    // only refetch data and never aggressively sign out.
-    const handleVisibility = () => {
-      if (typeof document === 'undefined') return;
-      if (document.visibilityState !== 'visible') return;
-      if (isSessionExpired()) {
-        forceSignOutExpired();
-      }
-    };
-
-    if (typeof document !== 'undefined') {
-      document.addEventListener('visibilitychange', handleVisibility);
-    }
-
     return () => {
       cancelled = true;
       clearTimeout(safetyTimer);
       subscription.unsubscribe();
-      if (typeof document !== 'undefined') {
-        document.removeEventListener('visibilitychange', handleVisibility);
-      }
     };
   }, []);
 
@@ -275,25 +249,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         10000,
         'Sign in',
       );
-      if (error) return { error: error.message };
-      // Record the login timestamp immediately — onAuthStateChange will also
-      // set it, but having it set before the event avoids any race.
+      if (error) {
+        // Map Supabase errors to user-friendly messages
+        const msg = error.message || '';
+        if (/invalid login credentials/i.test(msg)) {
+          return { error: 'Invalid login credentials. Please check your email and password.' };
+        }
+        return { error: msg };
+      }
       setLoginTs(Date.now());
       return { error: null };
     } catch (e: any) {
-      return { error: e?.message || 'Sign in failed. Please try again.' };
+      const msg = e?.message || '';
+      if (/timed out/i.test(msg) || /network/i.test(msg) || /fetch/i.test(msg)) {
+        return { error: 'Connection error. Please check your internet and try again.' };
+      }
+      return { error: msg || 'Sign in failed. Please try again.' };
     }
   };
 
   const signOut = async () => {
+    // Clear local state first so UI updates immediately
     clearLoginTs();
+    setUser(null);
+    setSession(null);
     try {
       await supabase.auth.signOut();
     } catch {
       // ignore
     }
-    setUser(null);
-    setSession(null);
   };
 
   return (
