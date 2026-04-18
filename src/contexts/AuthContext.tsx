@@ -204,32 +204,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, s) => {
       if (cancelled) return;
+
+      // CRITICAL: Supabase's autoRefreshToken uses the Page Visibility API
+      // internally. When the tab regains focus, Supabase fires TOKEN_REFRESHED
+      // (and sometimes INITIAL_SESSION). If we re-fetched the user here and
+      // the network request failed, we'd set user=null and the dashboards'
+      // redirect-on-null effect would bounce the user to /login. That is the
+      // "tab-switch logout" bug.
+      //
+      // To prevent this, we ONLY touch user state on explicit SIGNED_IN and
+      // SIGNED_OUT events. Everything else (TOKEN_REFRESHED, USER_UPDATED,
+      // INITIAL_SESSION, PASSWORD_RECOVERY) only updates the session object
+      // — the user object and 24hr timestamp are left alone.
       try {
-        setSession(s);
-
-        if (s?.user) {
-          // Record login timestamp only on real SIGNED_IN events.
-          // TOKEN_REFRESHED preserves the original stamp.
-          if (event === 'SIGNED_IN') {
-            setLoginTs(Date.now());
-          }
-
-          const appUser = await fetchAppUser(s.user.id, s.user.email);
-          if (!cancelled) setUser(appUser);
-
-          if (event === 'SIGNED_IN') {
+        if (event === 'SIGNED_IN') {
+          setSession(s);
+          setLoginTs(Date.now());
+          if (s?.user) {
+            const appUser = await fetchAppUser(s.user.id, s.user.email);
+            if (!cancelled) setUser(appUser);
             // Fire-and-forget — never block auth state on this
             supabase.from('users')
               .update({ last_login_at: new Date().toISOString() })
               .eq('auth_id', s.user.id)
               .then(() => {}, () => {});
           }
-        } else {
+        } else if (event === 'SIGNED_OUT') {
           clearLoginTs();
+          setSession(null);
           setUser(null);
+        } else {
+          // TOKEN_REFRESHED / USER_UPDATED / INITIAL_SESSION / etc.
+          // Update session only. NEVER touch user state or login timestamp,
+          // and NEVER re-fetch the user record — a failed re-fetch on tab
+          // focus must not log the user out.
+          if (s) setSession(s);
         }
       } catch {
-        // Swallow — never let auth state handler hang the UI
+        // Swallow — never let auth state handler hang the UI or clear user.
       } finally {
         if (!cancelled) setLoading(false);
       }

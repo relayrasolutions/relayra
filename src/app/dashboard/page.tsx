@@ -178,29 +178,15 @@ export default function DashboardPage() {
   useEffect(() => { if (!authLoading && !user) router.replace('/login'); }, [authLoading, user, router]);
   useEffect(() => { fetchDashboard(); }, [fetchDashboard]);
 
-  // 24-hour hard session check on mount — if the recorded login time is
-  // older than 24h, force sign-out and redirect. No visibility listener: we
-  // never check auth on tab focus (that would log users out for network
-  // blips or idle tabs). See Issues 2 & 8 in the auth overhaul spec.
+  // 24-hour hard session check on mount ONLY. No focus / visibility /
+  // pageshow listeners anywhere — tab switches must never trigger auth work.
+  // If the recorded login time is older than 24h, force sign-out.
   useEffect(() => {
     if (isSessionExpired()) {
       clearLoginTs();
       supabase.auth.signOut().finally(() => router.replace('/login'));
     }
   }, [router]);
-
-  // Back/Forward cache protection — if the user navigates here via the
-  // browser's bfcache (back/forward button), force a reload so stale data
-  // and stale auth state are discarded. See Issue 3 in the spec.
-  useEffect(() => {
-    const handlePageShow = (e: PageTransitionEvent) => {
-      if (e.persisted) {
-        window.location.reload();
-      }
-    };
-    window.addEventListener('pageshow', handlePageShow);
-    return () => window.removeEventListener('pageshow', handlePageShow);
-  }, []);
 
   useEffect(() => {
     if (!loading) { setLoadingStale(false); return; }
