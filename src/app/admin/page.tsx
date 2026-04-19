@@ -34,7 +34,7 @@ const PLAN_LABELS: Record<string, string> = {
 };
 
 export default function AdminPage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, session, loading: authLoading } = useAuth();
   const router = useRouter();
   const [schools, setSchools] = useState<School[]>([]);
   const [stats, setStats] = useState<PlatformStats | null>(null);
@@ -235,16 +235,30 @@ export default function AdminPage() {
     } finally { setAdding(false); }
   };
 
+  // Redirect to /login ONLY when auth has finished resolving AND there's
+  // definitively no session. If a session exists but user is still being
+  // fetched (common race on reload after login), keep showing the spinner.
   useEffect(() => {
-    if (!authLoading && !user) router.replace('/login');
+    if (!authLoading && !user && !session) router.replace('/login');
+  }, [authLoading, user, session, router]);
+
+  // If wrong role, route to the correct dashboard — NEVER to /login.
+  useEffect(() => {
+    if (!authLoading && user && user.role !== 'super_admin') {
+      if (user.role === 'school_staff') router.replace('/teacher');
+      else router.replace('/dashboard');
+    }
   }, [authLoading, user, router]);
 
-  if (authLoading || !user) {
+  // Spinner while: auth is resolving, OR session exists but user not yet
+  // loaded, OR user is wrong role and about to be redirected.
+  if (authLoading || (session && !user) || (user && user.role !== 'super_admin')) {
     return <AppLayout><div className="flex items-center justify-center py-20"><div className="w-6 h-6 border-2 border-[#0D9488] border-t-transparent rounded-full animate-spin" /></div></AppLayout>;
   }
 
-  if (user.role !== 'super_admin') {
-    return <AppLayout><div className="text-center py-12"><p className="text-[#64748B]">Access denied. Super admin only.</p></div></AppLayout>;
+  if (!user) {
+    // No session and no user — /login redirect is already queued.
+    return <AppLayout><div className="flex items-center justify-center py-20"><div className="w-6 h-6 border-2 border-[#0D9488] border-t-transparent rounded-full animate-spin" /></div></AppLayout>;
   }
 
   const filteredSchools = schools.filter(s => {

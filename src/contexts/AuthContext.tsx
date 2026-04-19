@@ -142,11 +142,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
+    // Becomes true once initAuth has finished (success or failure). Until
+    // then, onAuthStateChange events are ignored — otherwise the
+    // INITIAL_SESSION event (which Supabase fires immediately after
+    // subscribe) would race with initAuth's user fetch and flip loading to
+    // false while user is still null, causing dashboards to redirect to
+    // /login right after a successful login.
+    let initialized = false;
 
     // Hard safety timeout: if initial auth check takes >5s, unblock UI.
-    // Dashboards will then redirect to /login on their own if user is null.
     const safetyTimer = setTimeout(() => {
-      if (!cancelled) setLoading(false);
+      if (!cancelled) {
+        initialized = true;
+        setLoading(false);
+      }
     }, 5000);
 
     const initAuth = async () => {
@@ -183,17 +192,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (getLoginTs() === null) setLoginTs(Date.now());
 
           const appUser = await fetchAppUser(s.user.id, s.user.email);
-          if (!cancelled) setUser(appUser);
+          if (!cancelled && appUser) setUser(appUser);
+          // If fetchAppUser returned null despite a valid session (network
+          // blip, transient RLS issue), we DO NOT null-out user. Dashboards
+          // will keep showing a spinner while the session exists; the user
+          // can retry. Never auto-redirect to /login from a soft failure.
         }
       } catch {
-        // Network / timeout — treat as signed out, but do NOT redirect from here.
-        // The landing page is public and dashboards own their own redirect logic.
-        if (!cancelled) {
-          setSession(null);
-          setUser(null);
-        }
+        // Network / timeout — preserve existing state. Do NOT blank out
+        // user/session here, because that would cause a redirect loop on
+        // flaky networks. Real auth failures surface via the `error` branch
+        // above or via explicit signOut().
       } finally {
         if (!cancelled) {
+          initialized = true;
           clearTimeout(safetyTimer);
           setLoading(false);
         }
@@ -202,48 +214,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     initAuth();
 
+    // onAuthStateChange handler — intentionally minimal.
+    //
+    // Two bugs this guards against:
+    //
+    // (1) BUG: Login → dashboard → bounce to /login. Root cause: Supabase
+    //     fires INITIAL_SESSION immediately after subscribe. If we ran the
+    //     handler before initAuth finished, loading would flip to false
+    //     while user was still being fetched, and the dashboard redirect
+    //     effect would fire. `initialized` prevents that.
+    //
+    // (2) BUG: Tab switch → logged out. Root cause: Supabase's
+    //     autoRefreshToken uses the Page Visibility API. On tab focus it
+    //     refreshes the token; if the refresh fails for any reason,
+    //     Supabase emits SIGNED_OUT. We used to honor SIGNED_OUT here,
+    //     which nuked state and bounced the user to /login. We now
+    //     IGNORE SIGNED_OUT from this event stream entirely — the only
+    //     paths that clear state are the explicit signOut() button and
+    //     the 24-hour check on page load. A failed token refresh on tab
+    //     focus can never log the user out.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, s) => {
       if (cancelled) return;
+      if (!initialized) return; // skip INITIAL_SESSION race
 
-      // CRITICAL: Supabase's autoRefreshToken uses the Page Visibility API
-      // internally. When the tab regains focus, Supabase fires TOKEN_REFRESHED
-      // (and sometimes INITIAL_SESSION). If we re-fetched the user here and
-      // the network request failed, we'd set user=null and the dashboards'
-      // redirect-on-null effect would bounce the user to /login. That is the
-      // "tab-switch logout" bug.
-      //
-      // To prevent this, we ONLY touch user state on explicit SIGNED_IN and
-      // SIGNED_OUT events. Everything else (TOKEN_REFRESHED, USER_UPDATED,
-      // INITIAL_SESSION, PASSWORD_RECOVERY) only updates the session object
-      // — the user object and 24hr timestamp are left alone.
       try {
         if (event === 'SIGNED_IN') {
+          // This only fires for real logins that happen after initial load
+          // (e.g. a login that doesn't full-reload). The normal login flow
+          // does window.location.href which re-runs initAuth on next load,
+          // so this branch is a defensive fallback.
           setSession(s);
           setLoginTs(Date.now());
           if (s?.user) {
             const appUser = await fetchAppUser(s.user.id, s.user.email);
-            if (!cancelled) setUser(appUser);
-            // Fire-and-forget — never block auth state on this
+            if (!cancelled && appUser) setUser(appUser);
             supabase.from('users')
               .update({ last_login_at: new Date().toISOString() })
               .eq('auth_id', s.user.id)
               .then(() => {}, () => {});
           }
-        } else if (event === 'SIGNED_OUT') {
-          clearLoginTs();
-          setSession(null);
-          setUser(null);
         } else {
-          // TOKEN_REFRESHED / USER_UPDATED / INITIAL_SESSION / etc.
-          // Update session only. NEVER touch user state or login timestamp,
-          // and NEVER re-fetch the user record — a failed re-fetch on tab
-          // focus must not log the user out.
+          // SIGNED_OUT, TOKEN_REFRESHED, USER_UPDATED, PASSWORD_RECOVERY,
+          // INITIAL_SESSION (if it sneaks past the initialized gate).
+          // Update session object only. NEVER touch user state. NEVER
+          // touch login timestamp. NEVER call setLoading — only initAuth
+          // owns loading.
           if (s) setSession(s);
         }
       } catch {
-        // Swallow — never let auth state handler hang the UI or clear user.
-      } finally {
-        if (!cancelled) setLoading(false);
+        // Swallow — never let a failing handler clear state.
       }
     });
 

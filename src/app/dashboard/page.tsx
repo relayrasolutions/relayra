@@ -40,7 +40,7 @@ function getGreeting(): string {
 }
 
 export default function DashboardPage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, session, loading: authLoading } = useAuth();
   const router = useRouter();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -175,7 +175,21 @@ export default function DashboardPage() {
     } finally { if (!silent) setLoading(false); }
   }, [user?.schoolId]);
 
-  useEffect(() => { if (!authLoading && !user) router.replace('/login'); }, [authLoading, user, router]);
+  // Redirect to /login ONLY when auth finished AND no session exists. If
+  // session is present but user hasn't resolved (reload-after-login race),
+  // keep the spinner — never bounce to /login prematurely.
+  useEffect(() => {
+    if (!authLoading && !user && !session) router.replace('/login');
+  }, [authLoading, user, session, router]);
+
+  // Wrong role: route to the correct dashboard (NOT /login).
+  useEffect(() => {
+    if (!authLoading && user) {
+      if (user.role === 'super_admin') router.replace('/admin');
+      else if (user.role === 'school_staff') router.replace('/teacher');
+    }
+  }, [authLoading, user, router]);
+
   useEffect(() => { fetchDashboard(); }, [fetchDashboard]);
 
   // 24-hour hard session check on mount ONLY. No focus / visibility /
@@ -194,7 +208,13 @@ export default function DashboardPage() {
     return () => clearTimeout(timer);
   }, [loading]);
 
-  if (authLoading || !user) {
+  // Spinner while: auth resolving, OR session exists but user not loaded,
+  // OR user is wrong role and about to be redirected.
+  if (authLoading || (session && !user) || (user && user.role !== 'school_admin')) {
+    return <AppLayout><div className="flex items-center justify-center py-20"><div className="w-6 h-6 border-2 border-[#0D9488] border-t-transparent rounded-full animate-spin" /></div></AppLayout>;
+  }
+
+  if (!user) {
     return <AppLayout><div className="flex items-center justify-center py-20"><div className="w-6 h-6 border-2 border-[#0D9488] border-t-transparent rounded-full animate-spin" /></div></AppLayout>;
   }
 

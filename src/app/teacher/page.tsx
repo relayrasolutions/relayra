@@ -35,7 +35,7 @@ function getGreeting(): string {
 }
 
 export default function TeacherPage() {
-  const { user, signOut, loading: authLoading } = useAuth();
+  const { user, session, signOut, loading: authLoading } = useAuth();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>('attendance');
   const [students, setStudents] = useState<Student[]>([]);
@@ -116,7 +116,21 @@ export default function TeacherPage() {
   }, [user?.schoolId, user?.id, today]);
 
   useEffect(() => { loadData(); }, [loadData]);
-  useEffect(() => { if (!authLoading && !user) router.replace('/login'); }, [authLoading, user, router]);
+
+  // Redirect to /login ONLY when auth finished AND no session exists. If a
+  // session is present but user hasn't resolved (reload-after-login race),
+  // keep the spinner — never bounce to /login prematurely.
+  useEffect(() => {
+    if (!authLoading && !user && !session) router.replace('/login');
+  }, [authLoading, user, session, router]);
+
+  // Wrong role: route to the correct dashboard (NOT /login).
+  useEffect(() => {
+    if (!authLoading && user) {
+      if (user.role === 'super_admin') router.replace('/admin');
+      else if (user.role === 'school_admin') router.replace('/dashboard');
+    }
+  }, [authLoading, user, router]);
 
   // 24-hour hard session check on mount ONLY. No focus / visibility /
   // pageshow listeners anywhere — tab switches must never trigger auth work.
@@ -166,7 +180,9 @@ export default function TeacherPage() {
     unmarked: students.filter(s => !attendance[s.id]).length,
   };
 
-  if (authLoading || !user) {
+  // Spinner while auth resolving, OR session exists but user not loaded,
+  // OR user is wrong role and about to be redirected.
+  if (authLoading || (session && !user) || (user && user.role !== 'school_staff') || !user) {
     return <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]"><div className="w-6 h-6 border-2 border-[#0D9488] border-t-transparent rounded-full animate-spin" /></div>;
   }
 
