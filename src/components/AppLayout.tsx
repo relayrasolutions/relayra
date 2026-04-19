@@ -60,7 +60,7 @@ function getSchoolNav(badges: { defaulters: number; unread: number }): NavGroup[
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, signOut, loading } = useAuth();
+  const { user, session, signOut, loading } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [today, setToday] = useState('');
   const [schoolName, setSchoolName] = useState('');
@@ -91,12 +91,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   useEffect(() => { fetchSchoolName(); fetchBadges(); }, [fetchSchoolName, fetchBadges]);
 
+  // Redirect to /login ONLY when auth finished AND no session exists.
+  // If session is present but user is still being fetched (reload race on
+  // initial load after a fresh login), stay on the spinner — never bounce
+  // to /login. Wrong-role redirect goes to /teacher, never to /login.
   useEffect(() => {
-    if (!loading && !user) router.replace('/login');
+    if (!loading && !user && !session) router.replace('/login');
     if (!loading && user?.role === 'school_staff' && !pathname.startsWith('/teacher')) router.replace('/teacher');
-  }, [user, loading, router, pathname]);
+  }, [user, session, loading, router, pathname]);
 
-  if (loading) {
+  // Spinner while: auth resolving, OR session exists but user not loaded.
+  if (loading || (session && !user)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]">
         <div className="w-8 h-8 border-[3px] border-[#0D9488] border-t-transparent rounded-full animate-spin" />
